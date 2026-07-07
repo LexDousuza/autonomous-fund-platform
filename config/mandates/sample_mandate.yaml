@@ -1,0 +1,13 @@
+trading_date: "2026-07-07"
+
+buckets:
+  reserve_bucket: 40000
+  intraday_bucket: 60000
+
+risk_limits:
+  max_daily_loss: 2500
+  max_trades_per_day: 6
+  stop_new_entries_after: "14:45"
+  force_square_off_at: "15:20"
+
+execution_mode: "paper"

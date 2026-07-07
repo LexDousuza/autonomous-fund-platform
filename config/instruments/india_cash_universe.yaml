@@ -1,0 +1,52 @@
+universe_name: india_cash_v1
+
+instruments:
+  - symbol: RELIANCE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TCS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INFY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HDFCBANK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ICICIBANK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SBIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ITC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RELIANCE
+    exchange: BSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TCS
+    exchange: BSE
+    segment: CASH
+    enabled: true

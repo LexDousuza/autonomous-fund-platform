@@ -1,0 +1,8 @@
+strategy:
+  name: simple_breakout_momentum
+
+params:
+  breakout_lookback_bars: 1
+  min_volume_multiplier: 1.0
+  allow_multiple_entries: false
+  quantity_per_trade: 5

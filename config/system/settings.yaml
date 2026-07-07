@@ -1,0 +1,23 @@
+project:
+  name: autonomous-fund-platform
+  version: v1
+
+market:
+  country: INDIA
+  exchanges:
+    - BSE
+    - NSE
+  instrument_scope: cash_equities
+
+execution:
+  default_mode: paper
+  broker: groww
+  timezone: Asia/Kolkata
+
+strategy:
+  family: intraday_breakout_momentum
+
+capital:
+  bucket_model:
+    reserve_bucket_enabled: true
+    intraday_bucket_enabled: true
