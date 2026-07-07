@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from core.allocations.daily_mandate import load_daily_mandate
 from core.broker.base import OrderRequest, OrderSide, OrderType, ProductType
 from core.broker.paper import PaperBroker
+from core.portfolio.allocation import build_portfolio_allocation_plan
 from core.risk.base import RiskContext
 from core.risk.simple_intraday import SimpleIntradayRiskManager
 from core.strategy.base import MarketBar, SignalSide, StrategyContext
@@ -33,8 +34,9 @@ def build_order_from_signal(signal, quantity: int, price: float) -> OrderRequest
 
 
 def main() -> None:
-    # 1) load today's mandate
+    # 1) load today's mandate and derive the day's allocation plan
     mandate = load_daily_mandate("config/mandates/sample_mandate.yaml")
+    allocation_plan = build_portfolio_allocation_plan(mandate)
 
     # 2) create components
     strategy = SimpleBreakoutMomentumStrategy(
@@ -75,9 +77,9 @@ def main() -> None:
     daily_realized_pnl = 0.0
 
     print("=== PAPER TRADER START ===")
-    print(f"Trading date: {mandate.trading_date}")
-    print(f"Intraday capital: {mandate.buckets.intraday_bucket}")
-    print(f"Execution mode: {mandate.execution_mode}")
+    print(f"Trading date: {allocation_plan.trading_date}")
+    print(f"Intraday capital: {allocation_plan.intraday_capital}")
+    print(f"Execution mode: {allocation_plan.execution_mode}")
     print()
 
     for bar in bars:
@@ -109,12 +111,12 @@ def main() -> None:
             order = build_order_from_signal(signal, quantity=5, price=bar.close)
 
             risk_context = RiskContext(
-                available_intraday_capital=mandate.buckets.intraday_bucket,
+                available_intraday_capital=allocation_plan.intraday_capital,
                 used_intraday_capital=used_intraday_capital,
                 daily_realized_pnl=daily_realized_pnl,
                 trades_taken_today=trades_taken_today,
-                max_daily_loss=mandate.risk_limits.max_daily_loss,
-                max_trades_per_day=mandate.risk_limits.max_trades_per_day,
+                max_daily_loss=allocation_plan.max_daily_loss,
+                max_trades_per_day=allocation_plan.max_trades_per_day,
             )
 
             decision = risk_manager.evaluate(order, risk_context)
