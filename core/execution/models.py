@@ -8,6 +8,7 @@ from core.broker.base import Order, Position
 from core.portfolio.exit_models import ExitDecision, ExitPolicyConfig
 from core.portfolio.models import PortfolioAllocationPlan
 from core.portfolio.sizing_models import PositionSizingDecision
+from core.risk.session_models import SessionRiskState
 
 
 @dataclass(slots=True)
@@ -49,8 +50,13 @@ class ExecutionSessionResult:
     ``sizing_decisions`` holds every ``PositionSizingDecision`` made for a
     generated signal (including ones that sized to zero and were therefore
     never placed), so quantity decisions are auditable independently of
-    whether an order resulted. A signal that sizes to zero, or that is
-    rejected by the risk manager, is counted in ``rejected_signals``.
+    whether an order resulted. A signal that sizes to zero, is skipped by
+    session guardrails, or is rejected by the risk manager, is counted in
+    ``rejected_signals``; ``skipped_due_to_session_guardrails`` narrows
+    that down to just the guardrail-latched skips, and
+    ``final_session_risk_state`` is a snapshot of the guardrail state at
+    the end of the session (entries taken, realized PnL, whether/why entry
+    is blocked).
     """
 
     trading_date: date
@@ -59,9 +65,11 @@ class ExecutionSessionResult:
     generated_signals: int = 0
     approved_signals: int = 0
     rejected_signals: int = 0
+    skipped_due_to_session_guardrails: int = 0
     placed_orders: list[Order] = field(default_factory=list)
     sizing_decisions: list[PositionSizingDecision] = field(default_factory=list)
     exit_decisions: list[ExitDecision] = field(default_factory=list)
     exit_orders: list[Order] = field(default_factory=list)
     final_positions: list[Position] = field(default_factory=list)
+    final_session_risk_state: SessionRiskState | None = None
     metadata: dict[str, Any] = field(default_factory=dict)

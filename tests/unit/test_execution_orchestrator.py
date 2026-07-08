@@ -68,6 +68,25 @@ class BuyOnceEverStrategy(Strategy):
         ]
 
 
+class ReBuyWhenFlatStrategy(Strategy):
+    """Test strategy that emits a BUY signal whenever it holds no open position."""
+
+    def on_bar(self, bar, history, open_positions):
+        key = f"{bar.exchange}:{bar.symbol}"
+        if key in open_positions:
+            return []
+        return [
+            TradeSignal(
+                strategy_name=self.context.strategy_name,
+                symbol=bar.symbol,
+                exchange=bar.exchange,
+                side=SignalSide.BUY,
+                timestamp=bar.timestamp,
+                reason="test_rebuy_when_flat",
+            )
+        ]
+
+
 class FakeRiskManager(RiskManager):
     """Test risk manager with a fixed approve/reject outcome."""
 
@@ -98,14 +117,18 @@ def make_bars(count: int, symbol: str = "TEST") -> list[MarketBar]:
     ]
 
 
-def make_allocation_plan(max_capital_per_trade: float = 15000.0) -> PortfolioAllocationPlan:
+def make_allocation_plan(
+    max_capital_per_trade: float = 15000.0,
+    max_trades_per_day: int = 6,
+    max_daily_loss: float = 2500.0,
+) -> PortfolioAllocationPlan:
     return PortfolioAllocationPlan(
         trading_date=date(2026, 1, 1),
         total_capital=100000.0,
         reserve_capital=40000.0,
         intraday_capital=60000.0,
-        max_daily_loss=2500.0,
-        max_trades_per_day=6,
+        max_daily_loss=max_daily_loss,
+        max_trades_per_day=max_trades_per_day,
         max_capital_per_trade=max_capital_per_trade,
         max_open_positions=4,
         max_symbol_allocation=max_capital_per_trade,
@@ -379,6 +402,112 @@ class ExecutionOrchestratorTests(unittest.TestCase):
         self.assertEqual(len(result.sizing_decisions), 1)
         self.assertEqual(result.sizing_decisions[0].approved_quantity, 0)
         self.assertEqual(result.sizing_decisions[0].reason, "price_exceeds_capital_per_trade")
+
+    def test_no_guardrail_block_before_thresholds_reached(self) -> None:
+        bars = make_price_bars([100.0, 100.0, 100.0])
+        orchestrator, broker = make_orchestrator(
+            bars, FakeRiskManager(approve=True), "always_buy", AlwaysBuyStrategy
+        )
+        config = make_config(
+            "always_buy",
+            ["TEST"],
+            allocation_plan=make_allocation_plan(
+                max_capital_per_trade=100.0, max_trades_per_day=10, max_daily_loss=100000.0
+            ),
+        )
+
+        result = orchestrator.run_session(config)
+
+        self.assertEqual(result.skipped_due_to_session_guardrails, 0)
+        self.assertEqual(result.approved_signals, 3)
+        self.assertIsNotNone(result.final_session_risk_state)
+        self.assertFalse(result.final_session_risk_state.entry_blocked)
+        self.assertIsNone(result.final_session_risk_state.block_reason)
+
+    def test_guardrail_blocks_after_max_trades_per_day_reached(self) -> None:
+        bars = make_price_bars([100.0] * 5)
+        orchestrator, broker = make_orchestrator(
+            bars, FakeRiskManager(approve=True), "always_buy", AlwaysBuyStrategy
+        )
+        config = make_config(
+            "always_buy",
+            ["TEST"],
+            allocation_plan=make_allocation_plan(max_capital_per_trade=100.0, max_trades_per_day=2),
+        )
+
+        result = orchestrator.run_session(config)
+
+        self.assertEqual(result.generated_signals, 5)
+        self.assertEqual(result.approved_signals, 2)
+        self.assertEqual(result.rejected_signals, 3)
+        self.assertEqual(result.skipped_due_to_session_guardrails, 3)
+        self.assertEqual(len(result.placed_orders), 2)
+
+        # Same-direction accumulation: 2 buys of qty=1 each -> total qty 2
+        self.assertEqual(result.final_positions[0].quantity, 2)
+
+        state = result.final_session_risk_state
+        self.assertTrue(state.entry_blocked)
+        self.assertEqual(state.block_reason, "max_trades_per_day_reached")
+        self.assertEqual(state.entries_taken, 2)
+
+    def test_guardrail_blocks_after_max_daily_loss_breached(self) -> None:
+        # Bar 0 (100): flat -> buy. Bar 1 (80): stop loss (10%) exits at a
+        # -20 realized loss, which alone breaches a -15 daily loss floor,
+        # latching the block before the same bar's re-entry attempt.
+        bars = make_price_bars([100.0, 80.0, 100.0, 80.0])
+        orchestrator, broker = make_orchestrator(
+            bars, FakeRiskManager(approve=True), "rebuy", ReBuyWhenFlatStrategy
+        )
+        config = make_config(
+            "rebuy",
+            ["TEST"],
+            allocation_plan=make_allocation_plan(max_capital_per_trade=100.0, max_daily_loss=15.0),
+            exit_policy=ExitPolicyConfig(stop_loss_pct=10.0),
+        )
+
+        result = orchestrator.run_session(config)
+
+        self.assertEqual(result.processed_bars, 4)
+        self.assertEqual(result.approved_signals, 1)  # only the bar-0 entry
+        self.assertEqual(result.skipped_due_to_session_guardrails, 3)  # bars 1, 2, 3
+
+        self.assertEqual(len(result.exit_decisions), 1)
+        self.assertEqual(result.exit_decisions[0].reason, "stop_loss")
+
+        state = result.final_session_risk_state
+        self.assertTrue(state.entry_blocked)
+        self.assertEqual(state.block_reason, "max_daily_loss_breached")
+        self.assertEqual(state.realized_pnl, -20.0)
+
+        # No re-entry after the exit: guardrails blocked it.
+        self.assertEqual(result.final_positions[0].quantity, 0)
+
+    def test_exits_still_processed_after_entries_blocked(self) -> None:
+        # Bar 0: entry at 100, immediately latches max_trades_per_day=1.
+        # Bar 1: price drops 10% -> stop loss must still fire even though
+        # new entries are blocked.
+        bars = make_price_bars([100.0, 90.0])
+        orchestrator, broker = make_orchestrator(
+            bars, FakeRiskManager(approve=True), "buy_once", BuyOnceEverStrategy
+        )
+        config = make_config(
+            "buy_once",
+            ["TEST"],
+            allocation_plan=make_allocation_plan(max_capital_per_trade=100.0, max_trades_per_day=1),
+            exit_policy=ExitPolicyConfig(stop_loss_pct=5.0),
+        )
+
+        result = orchestrator.run_session(config)
+
+        state = result.final_session_risk_state
+        self.assertTrue(state.entry_blocked)
+        self.assertEqual(state.block_reason, "max_trades_per_day_reached")
+
+        self.assertEqual(len(result.exit_decisions), 1)
+        self.assertEqual(result.exit_decisions[0].reason, "stop_loss")
+        self.assertEqual(len(result.exit_orders), 1)
+        self.assertEqual(result.final_positions[0].quantity, 0)
 
 
 if __name__ == "__main__":
