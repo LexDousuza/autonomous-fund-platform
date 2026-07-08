@@ -9,6 +9,7 @@ from core.execution.orchestrator import ExecutionOrchestrator
 from core.market_data.memory_feed import MemoryMarketDataFeed
 from core.market_data.service import MarketDataService
 from core.portfolio.allocation import build_portfolio_allocation_plan
+from core.portfolio.exit_models import ExitPolicyConfig
 from core.risk.simple_intraday import SimpleIntradayRiskManager
 from core.strategy.base import MarketBar
 import core.strategy.simple_breakout_momentum  # noqa: F401  (registers the strategy)
@@ -39,6 +40,16 @@ def build_session_bars() -> list[MarketBar]:
             close=2501.0,  # breakout above previous high
             volume=150000,  # stronger volume
         ),
+        MarketBar(
+            symbol="RELIANCE",
+            exchange="NSE",
+            timestamp=base_time + timedelta(minutes=2),
+            open=2505.0,
+            high=2565.0,
+            low=2500.0,
+            close=2560.0,  # rallies past the profit target of the bar-1 entry
+            volume=120000,
+        ),
     ]
 
 
@@ -63,7 +74,10 @@ def main() -> None:
         broker=broker,
     )
 
-    # 3) describe the session and hand it to the orchestrator
+    # 3) describe the session (including V1 intraday exit rules) and hand
+    #    it to the orchestrator
+    exit_policy = ExitPolicyConfig(stop_loss_pct=1.5, target_pct=2.0)
+
     session_config = TradingSessionConfig(
         trading_date=allocation_plan.trading_date,
         strategy_name="simple_breakout_momentum",
@@ -72,6 +86,7 @@ def main() -> None:
         symbols=["RELIANCE"],
         portfolio_allocation_plan=allocation_plan,
         quantity_per_trade=5,
+        exit_policy=exit_policy,
     )
 
     result = orchestrator.run_session(session_config)
@@ -94,6 +109,14 @@ def main() -> None:
         print(
             f"  -> id={order.order_id} status={order.status.value} "
             f"avg_price={order.average_price}"
+        )
+    print()
+
+    print(f"Exits triggered: {len(result.exit_decisions)}")
+    for decision, exit_order in zip(result.exit_decisions, result.exit_orders):
+        print(
+            f"  -> reason={decision.reason} id={exit_order.order_id} "
+            f"avg_price={exit_order.average_price}"
         )
     print()
 

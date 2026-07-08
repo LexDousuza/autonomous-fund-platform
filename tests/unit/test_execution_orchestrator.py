@@ -9,12 +9,13 @@ from __future__ import annotations
 import unittest
 from datetime import date, datetime
 
-from core.broker.base import OrderRequest
+from core.broker.base import OrderRequest, OrderSide
 from core.broker.paper import PaperBroker
 from core.execution.models import TradingSessionConfig
 from core.execution.orchestrator import ExecutionOrchestrator
 from core.market_data.memory_feed import MemoryMarketDataFeed
 from core.market_data.service import MarketDataService
+from core.portfolio.exit_models import ExitPolicyConfig
 from core.portfolio.models import PortfolioAllocationPlan
 from core.risk.base import RiskContext, RiskDecision, RiskManager
 from core.strategy.base import MarketBar, SignalSide, Strategy, StrategyContext, TradeSignal
@@ -42,6 +43,29 @@ class NeverSignalStrategy(Strategy):
 
     def on_bar(self, bar, history, open_positions):
         return []
+
+
+class BuyOnceEverStrategy(Strategy):
+    """Test strategy that emits exactly one BUY signal, on the first bar it sees."""
+
+    def __init__(self, context: StrategyContext) -> None:
+        super().__init__(context)
+        self._bought = False
+
+    def on_bar(self, bar, history, open_positions):
+        if self._bought:
+            return []
+        self._bought = True
+        return [
+            TradeSignal(
+                strategy_name=self.context.strategy_name,
+                symbol=bar.symbol,
+                exchange=bar.exchange,
+                side=SignalSide.BUY,
+                timestamp=bar.timestamp,
+                reason="test_buy_once",
+            )
+        ]
 
 
 class FakeRiskManager(RiskManager):
@@ -115,7 +139,29 @@ def make_orchestrator(
     return orchestrator, broker
 
 
-def make_config(strategy_name: str, symbols: list[str], quantity_per_trade: int = 1) -> TradingSessionConfig:
+def make_price_bars(closes: list[float], symbol: str = "TEST") -> list[MarketBar]:
+    base_time = datetime(2026, 1, 1, 9, 15, 0)
+    return [
+        MarketBar(
+            symbol=symbol,
+            exchange="NSE",
+            timestamp=base_time.replace(minute=15 + i),
+            open=close,
+            high=close,
+            low=close,
+            close=close,
+            volume=1000.0,
+        )
+        for i, close in enumerate(closes)
+    ]
+
+
+def make_config(
+    strategy_name: str,
+    symbols: list[str],
+    quantity_per_trade: int = 1,
+    exit_policy: ExitPolicyConfig | None = None,
+) -> TradingSessionConfig:
     return TradingSessionConfig(
         trading_date=date(2026, 1, 1),
         strategy_name=strategy_name,
@@ -124,6 +170,7 @@ def make_config(strategy_name: str, symbols: list[str], quantity_per_trade: int 
         symbols=symbols,
         portfolio_allocation_plan=make_allocation_plan(),
         quantity_per_trade=quantity_per_trade,
+        exit_policy=exit_policy,
     )
 
 
@@ -218,6 +265,70 @@ class ExecutionOrchestratorTests(unittest.TestCase):
         result = orchestrator.run_session(config)
 
         self.assertEqual(result.processed_bars, 1)
+
+    def test_entry_then_stop_loss_exit_closes_position(self) -> None:
+        # Bar 0: entry at 100. Bar 1: price drops 10% -> stop loss (5%) fires.
+        # Bar 2: nothing left to track, no further exit activity.
+        bars = make_price_bars([100.0, 90.0, 90.0])
+        orchestrator, broker = make_orchestrator(
+            bars, FakeRiskManager(approve=True), "buy_once", BuyOnceEverStrategy
+        )
+        config = make_config(
+            "buy_once",
+            ["TEST"],
+            quantity_per_trade=1,
+            exit_policy=ExitPolicyConfig(stop_loss_pct=5.0),
+        )
+
+        result = orchestrator.run_session(config)
+
+        self.assertEqual(result.processed_bars, 3)
+        self.assertEqual(result.generated_signals, 1)
+        self.assertEqual(result.approved_signals, 1)
+        self.assertEqual(len(result.placed_orders), 1)
+        self.assertEqual(result.placed_orders[0].average_price, 100.0)
+
+        self.assertEqual(len(result.exit_decisions), 1)
+        self.assertEqual(result.exit_decisions[0].reason, "stop_loss")
+        self.assertEqual(result.exit_decisions[0].quantity, 1)
+
+        self.assertEqual(len(result.exit_orders), 1)
+        self.assertEqual(result.exit_orders[0].side, OrderSide.SELL)
+        self.assertEqual(result.exit_orders[0].average_price, 90.0)
+
+        # Position closed: quantity back to zero after the exit fill.
+        self.assertEqual(result.final_positions[0].quantity, 0)
+
+    def test_target_exit_closes_position(self) -> None:
+        bars = make_price_bars([100.0, 105.0])
+        orchestrator, broker = make_orchestrator(
+            bars, FakeRiskManager(approve=True), "buy_once", BuyOnceEverStrategy
+        )
+        config = make_config(
+            "buy_once",
+            ["TEST"],
+            quantity_per_trade=1,
+            exit_policy=ExitPolicyConfig(target_pct=3.0),
+        )
+
+        result = orchestrator.run_session(config)
+
+        self.assertEqual(len(result.exit_decisions), 1)
+        self.assertEqual(result.exit_decisions[0].reason, "target")
+        self.assertEqual(result.final_positions[0].quantity, 0)
+
+    def test_no_exit_when_policy_not_configured(self) -> None:
+        bars = make_price_bars([100.0, 50.0])  # would trip a stop loss if one existed
+        orchestrator, broker = make_orchestrator(
+            bars, FakeRiskManager(approve=True), "buy_once", BuyOnceEverStrategy
+        )
+        config = make_config("buy_once", ["TEST"], quantity_per_trade=1)  # exit_policy=None
+
+        result = orchestrator.run_session(config)
+
+        self.assertEqual(result.exit_decisions, [])
+        self.assertEqual(result.exit_orders, [])
+        self.assertEqual(result.final_positions[0].quantity, 1)
 
 
 if __name__ == "__main__":

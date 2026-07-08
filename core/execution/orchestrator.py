@@ -9,6 +9,8 @@ from core.broker.base import (
 )
 from core.execution.models import ExecutionSessionResult, TradingSessionConfig
 from core.market_data.service import MarketDataService
+from core.portfolio.exit_models import ExitDecision
+from core.portfolio.position_manager import PositionManager
 from core.risk.base import RiskContext, RiskManager
 from core.strategy.base import MarketBar, SignalSide, StrategyContext, TradeSignal
 from core.strategy.registry import StrategyRegistry
@@ -42,6 +44,27 @@ def build_order_from_signal(signal: TradeSignal, quantity: int, price: float) ->
     )
 
 
+def build_exit_order(decision: ExitDecision, strategy_name: str) -> OrderRequest:
+    """
+    Convert an ``ExitDecision`` into a broker ``OrderRequest``.
+
+    V1 only tracks long positions, so an exit is always a sell of the full
+    tracked quantity, placed as a market order (the position should close
+    regardless of small slippage against the triggering bar's close).
+    """
+    return OrderRequest(
+        symbol=decision.symbol,
+        exchange=decision.exchange,
+        side=OrderSide.SELL,
+        quantity=decision.quantity,
+        order_type=OrderType.MARKET,
+        product_type=ProductType.INTRADAY,
+        price=decision.exit_price,
+        strategy_name=strategy_name,
+        metadata={"exit_reason": decision.reason, **decision.metadata},
+    )
+
+
 class ExecutionOrchestrator:
     """
     Coordinates market data, strategy execution, risk checks, and broker
@@ -71,12 +94,19 @@ class ExecutionOrchestrator:
         Run one deterministic trading session over the streamed bars for
         ``config.symbols`` and return an ``ExecutionSessionResult``.
 
-        Steps:
-        1. Build the strategy from the registry using the session config.
-        2. Subscribe to the requested symbols on the market data feed.
-        3. Iterate bars in stream order, asking the strategy for signals.
-        4. Run a risk check for each signal and place approved orders.
-        5. Accumulate and return session statistics.
+        Steps, per bar:
+        1. Evaluate exit rules (if ``config.exit_policy`` is set) for any
+           position opened in an earlier bar, and place exit orders for
+           any that trigger.
+        2. Ask the strategy for entry signals against the now-current
+           open positions.
+        3. Run a risk check for each signal and place approved orders,
+           registering fills with the position manager so future bars can
+           evaluate exits for them.
+
+        Before the loop: build the strategy from the registry using the
+        session config, and subscribe to the requested symbols on the
+        market data feed.
         """
         strategy_context = StrategyContext(
             strategy_name=config.strategy_name,
@@ -88,6 +118,7 @@ class ExecutionOrchestrator:
             self.market_data_service.subscribe(symbol)
 
         plan = config.portfolio_allocation_plan
+        position_manager = PositionManager()
         history: list[MarketBar] = []
         trades_taken_today = 0
         used_intraday_capital = 0.0
@@ -100,6 +131,14 @@ class ExecutionOrchestrator:
 
         for bar in self.market_data_service.stream():
             result.processed_bars += 1
+
+            if config.exit_policy is not None:
+                for exit_decision in position_manager.evaluate_exits(bar, config.exit_policy):
+                    result.exit_decisions.append(exit_decision)
+                    exit_request = build_exit_order(exit_decision, config.strategy_name)
+                    exit_order = self.broker.place_order(exit_request)
+                    result.exit_orders.append(exit_order)
+                    position_manager.clear(exit_decision.symbol, exit_decision.exchange)
 
             open_positions = {
                 f"{p.exchange}:{p.symbol}": p
@@ -138,6 +177,16 @@ class ExecutionOrchestrator:
 
                 trades_taken_today += 1
                 used_intraday_capital += (placed.average_price or 0.0) * placed.quantity
+
+                if order.side == OrderSide.BUY:
+                    position_manager.register_entry(
+                        symbol=placed.symbol,
+                        exchange=placed.exchange,
+                        quantity=placed.quantity,
+                        entry_price=placed.average_price or 0.0,
+                        entry_time=bar.timestamp,
+                        strategy_name=signal.strategy_name,
+                    )
 
             history.append(bar)
 
