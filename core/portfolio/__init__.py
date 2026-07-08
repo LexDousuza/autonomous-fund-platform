@@ -5,6 +5,8 @@ from core.portfolio.allocation import (
 )
 from core.portfolio.exit_models import ExitDecision, ExitPolicyConfig, PositionSnapshot
 from core.portfolio.exits import ExitPolicyEvaluator
+from core.portfolio.exposure_guardrails import PortfolioExposureGuardrails
+from core.portfolio.exposure_models import PositionLimitDecision
 from core.portfolio.models import PortfolioAllocationPlan
 from core.portfolio.position_manager import PositionManager, TrackedPosition
 from core.portfolio.sizing import PositionSizingEngine
@@ -24,4 +26,6 @@ __all__ = [
     "PositionSizingRequest",
     "PositionSizingDecision",
     "PositionSizingEngine",
+    "PositionLimitDecision",
+    "PortfolioExposureGuardrails",
 ]

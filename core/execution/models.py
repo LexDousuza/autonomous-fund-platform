@@ -51,12 +51,17 @@ class ExecutionSessionResult:
     generated signal (including ones that sized to zero and were therefore
     never placed), so quantity decisions are auditable independently of
     whether an order resulted. A signal that sizes to zero, is skipped by
-    session guardrails, or is rejected by the risk manager, is counted in
-    ``rejected_signals``; ``skipped_due_to_session_guardrails`` narrows
-    that down to just the guardrail-latched skips, and
-    ``final_session_risk_state`` is a snapshot of the guardrail state at
-    the end of the session (entries taken, realized PnL, whether/why entry
-    is blocked).
+    session guardrails, is skipped by portfolio exposure limits, or is
+    rejected by the risk manager, is counted in ``rejected_signals``;
+    ``skipped_due_to_session_guardrails`` and
+    ``skipped_due_to_position_limits`` narrow that down to just the
+    guardrail-latched skips and the max-open-positions/max-symbol-
+    allocation skips respectively. ``final_session_risk_state`` is a
+    snapshot of the session guardrail state at the end of the session
+    (entries taken, realized PnL, whether/why entry is blocked).
+    ``symbols_with_signals`` supports multi-symbol session reporting: it
+    is the set of symbols any signal was generated for, independent of
+    whether that signal resulted in an order.
     """
 
     trading_date: date
@@ -66,10 +71,12 @@ class ExecutionSessionResult:
     approved_signals: int = 0
     rejected_signals: int = 0
     skipped_due_to_session_guardrails: int = 0
+    skipped_due_to_position_limits: int = 0
     placed_orders: list[Order] = field(default_factory=list)
     sizing_decisions: list[PositionSizingDecision] = field(default_factory=list)
     exit_decisions: list[ExitDecision] = field(default_factory=list)
     exit_orders: list[Order] = field(default_factory=list)
     final_positions: list[Position] = field(default_factory=list)
     final_session_risk_state: SessionRiskState | None = None
+    symbols_with_signals: set[str] = field(default_factory=set)
     metadata: dict[str, Any] = field(default_factory=dict)

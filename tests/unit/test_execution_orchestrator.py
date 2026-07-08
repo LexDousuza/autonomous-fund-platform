@@ -87,6 +87,59 @@ class ReBuyWhenFlatStrategy(Strategy):
         ]
 
 
+class PerSymbolHighBreakoutStrategy(Strategy):
+    """
+    Test strategy mirroring ``SimpleBreakoutMomentumStrategy`` with
+    ``breakout_lookback_bars=1``: signals BUY only if the current close
+    exceeds the high of the single most recent bar in ``history``.
+
+    Used to prove ``history`` passed to a strategy is scoped to that
+    bar's own symbol - if bars from other symbols leaked in, the "most
+    recent bar" could belong to a different symbol entirely.
+    """
+
+    def on_bar(self, bar, history, open_positions):
+        if not history:
+            return []
+        reference_high = history[-1].high
+        if bar.close > reference_high:
+            return [
+                TradeSignal(
+                    strategy_name=self.context.strategy_name,
+                    symbol=bar.symbol,
+                    exchange=bar.exchange,
+                    side=SignalSide.BUY,
+                    timestamp=bar.timestamp,
+                    reason="test_per_symbol_breakout",
+                )
+            ]
+        return []
+
+
+class BuyOncePerSymbolStrategy(Strategy):
+    """Test strategy that emits exactly one BUY per distinct symbol, ever (even if later flat)."""
+
+    def __init__(self, context: StrategyContext) -> None:
+        super().__init__(context)
+        self._bought_keys: set[str] = set()
+
+    def on_bar(self, bar, history, open_positions):
+        key = f"{bar.exchange}:{bar.symbol}"
+        if key in self._bought_keys:
+            return []
+        self._bought_keys.add(key)
+        return [
+            TradeSignal(
+                strategy_name=self.context.strategy_name,
+                symbol=bar.symbol,
+                exchange=bar.exchange,
+                side=SignalSide.BUY,
+                timestamp=bar.timestamp,
+                reason="test_buy_once_per_symbol",
+            )
+        ]
+
+
 class FakeRiskManager(RiskManager):
     """Test risk manager with a fixed approve/reject outcome."""
 
@@ -121,6 +174,8 @@ def make_allocation_plan(
     max_capital_per_trade: float = 15000.0,
     max_trades_per_day: int = 6,
     max_daily_loss: float = 2500.0,
+    max_open_positions: int = 4,
+    max_symbol_allocation: float | None = None,
 ) -> PortfolioAllocationPlan:
     return PortfolioAllocationPlan(
         trading_date=date(2026, 1, 1),
@@ -130,8 +185,10 @@ def make_allocation_plan(
         max_daily_loss=max_daily_loss,
         max_trades_per_day=max_trades_per_day,
         max_capital_per_trade=max_capital_per_trade,
-        max_open_positions=4,
-        max_symbol_allocation=max_capital_per_trade,
+        max_open_positions=max_open_positions,
+        max_symbol_allocation=(
+            max_symbol_allocation if max_symbol_allocation is not None else max_capital_per_trade
+        ),
         execution_mode="paper",
     )
 
@@ -176,6 +233,24 @@ def make_price_bars(closes: list[float], symbol: str = "TEST") -> list[MarketBar
             volume=1000.0,
         )
         for i, close in enumerate(closes)
+    ]
+
+
+def make_symbol_bars(entries: list[tuple[str, float]], exchange: str = "NSE") -> list[MarketBar]:
+    """Build one bar per ``(symbol, close)`` entry, in the given order, each a minute apart."""
+    base_time = datetime(2026, 1, 1, 9, 15, 0)
+    return [
+        MarketBar(
+            symbol=symbol,
+            exchange=exchange,
+            timestamp=base_time.replace(minute=15 + i),
+            open=close,
+            high=close,
+            low=close,
+            close=close,
+            volume=1000.0,
+        )
+        for i, (symbol, close) in enumerate(entries)
     ]
 
 
@@ -256,9 +331,16 @@ class ExecutionOrchestratorTests(unittest.TestCase):
         orchestrator, broker = make_orchestrator(
             bars, FakeRiskManager(approve=True), "always_buy", AlwaysBuyStrategy
         )
-        # max_capital_per_trade=220.0 -> sizing approves qty=2 at each of these prices
+        # max_capital_per_trade=220.0 -> sizing approves qty=2 at each of these prices.
+        # max_symbol_allocation is raised well above max_capital_per_trade so
+        # repeated same-symbol accumulation isn't blocked by the exposure
+        # guardrail; that guardrail has its own dedicated tests.
         config = make_config(
-            "always_buy", ["TEST"], allocation_plan=make_allocation_plan(max_capital_per_trade=220.0)
+            "always_buy",
+            ["TEST"],
+            allocation_plan=make_allocation_plan(
+                max_capital_per_trade=220.0, max_symbol_allocation=10000.0
+            ),
         )
 
         result = orchestrator.run_session(config)
@@ -412,7 +494,10 @@ class ExecutionOrchestratorTests(unittest.TestCase):
             "always_buy",
             ["TEST"],
             allocation_plan=make_allocation_plan(
-                max_capital_per_trade=100.0, max_trades_per_day=10, max_daily_loss=100000.0
+                max_capital_per_trade=100.0,
+                max_trades_per_day=10,
+                max_daily_loss=100000.0,
+                max_symbol_allocation=10000.0,
             ),
         )
 
@@ -432,7 +517,9 @@ class ExecutionOrchestratorTests(unittest.TestCase):
         config = make_config(
             "always_buy",
             ["TEST"],
-            allocation_plan=make_allocation_plan(max_capital_per_trade=100.0, max_trades_per_day=2),
+            allocation_plan=make_allocation_plan(
+                max_capital_per_trade=100.0, max_trades_per_day=2, max_symbol_allocation=10000.0
+            ),
         )
 
         result = orchestrator.run_session(config)
@@ -508,6 +595,142 @@ class ExecutionOrchestratorTests(unittest.TestCase):
         self.assertEqual(result.exit_decisions[0].reason, "stop_loss")
         self.assertEqual(len(result.exit_orders), 1)
         self.assertEqual(result.final_positions[0].quantity, 0)
+
+    def test_multi_symbol_session_tracks_independent_positions(self) -> None:
+        bars = make_symbol_bars([("AAA", 100.0), ("BBB", 200.0)])
+        orchestrator, broker = make_orchestrator(
+            bars, FakeRiskManager(approve=True), "always_buy", AlwaysBuyStrategy
+        )
+        config = make_config(
+            "always_buy",
+            ["AAA", "BBB"],
+            allocation_plan=make_allocation_plan(max_capital_per_trade=200.0, max_open_positions=4),
+        )
+
+        result = orchestrator.run_session(config)
+
+        self.assertEqual(result.processed_bars, 2)
+        self.assertEqual(result.generated_signals, 2)
+        self.assertEqual(result.approved_signals, 2)
+        self.assertEqual(result.symbols_with_signals, {"AAA", "BBB"})
+
+        placed_symbols = {order.symbol for order in result.placed_orders}
+        self.assertEqual(placed_symbols, {"AAA", "BBB"})
+
+        # max_capital_per_trade=200.0 -> floor(200/100)=2 for AAA, floor(200/200)=1 for BBB
+        final_by_symbol = {p.symbol: p.quantity for p in result.final_positions}
+        self.assertEqual(final_by_symbol, {"AAA": 2, "BBB": 1})
+
+    def test_per_symbol_history_is_not_shared_across_symbols(self) -> None:
+        # Interleaved: A0, B0, A1, B1. A1's close (150) only breaks A's own
+        # bar-0 high (100), not B's bar-0 high (500). If `history` leaked
+        # across symbols, A1 would incorrectly compare against B0 and fail
+        # to signal.
+        bars = make_symbol_bars(
+            [("AAA", 90.0), ("BBB", 490.0), ("AAA", 150.0), ("BBB", 510.0)]
+        )
+        # Bar highs equal closes from make_symbol_bars only for the first
+        # occurrence per symbol in this construction; set highs explicitly.
+        bars[0].high = 100.0
+        bars[1].high = 500.0
+
+        orchestrator, broker = make_orchestrator(
+            bars, FakeRiskManager(approve=True), "breakout", PerSymbolHighBreakoutStrategy
+        )
+        config = make_config(
+            "breakout",
+            ["AAA", "BBB"],
+            allocation_plan=make_allocation_plan(max_capital_per_trade=1000.0, max_open_positions=4),
+        )
+
+        result = orchestrator.run_session(config)
+
+        # Both A1 (150 > A's own high of 100) and B1 (510 > B's own high of
+        # 500) should signal once history is correctly scoped per symbol.
+        self.assertEqual(result.generated_signals, 2)
+        self.assertEqual(result.symbols_with_signals, {"AAA", "BBB"})
+        self.assertEqual(result.approved_signals, 2)
+
+    def test_max_open_positions_blocks_new_symbol_entry(self) -> None:
+        bars = make_symbol_bars([("AAA", 100.0), ("BBB", 100.0), ("CCC", 100.0)])
+        orchestrator, broker = make_orchestrator(
+            bars, FakeRiskManager(approve=True), "always_buy", AlwaysBuyStrategy
+        )
+        config = make_config(
+            "always_buy",
+            ["AAA", "BBB", "CCC"],
+            allocation_plan=make_allocation_plan(
+                max_capital_per_trade=100.0, max_open_positions=2, max_symbol_allocation=10000.0
+            ),
+        )
+
+        result = orchestrator.run_session(config)
+
+        self.assertEqual(result.generated_signals, 3)
+        self.assertEqual(result.approved_signals, 2)
+        self.assertEqual(result.rejected_signals, 1)
+        self.assertEqual(result.skipped_due_to_session_guardrails, 0)
+        self.assertEqual(result.skipped_due_to_position_limits, 1)
+
+        placed_symbols = {order.symbol for order in result.placed_orders}
+        self.assertEqual(placed_symbols, {"AAA", "BBB"})
+
+        final_symbols = {p.symbol for p in result.final_positions}
+        self.assertEqual(final_symbols, {"AAA", "BBB"})
+
+    def test_symbol_allocation_rejects_oversized_addition(self) -> None:
+        # Same symbol, twice: first entry uses the full 100.0 budget.
+        # A second entry would push cumulative notional to 200.0, over a
+        # 150.0 max_symbol_allocation ceiling.
+        bars = make_price_bars([100.0, 100.0])
+        orchestrator, broker = make_orchestrator(
+            bars, FakeRiskManager(approve=True), "always_buy", AlwaysBuyStrategy
+        )
+        config = make_config(
+            "always_buy",
+            ["TEST"],
+            allocation_plan=make_allocation_plan(
+                max_capital_per_trade=100.0, max_open_positions=4, max_symbol_allocation=150.0
+            ),
+        )
+
+        result = orchestrator.run_session(config)
+
+        self.assertEqual(result.approved_signals, 1)
+        self.assertEqual(result.skipped_due_to_position_limits, 1)
+        self.assertEqual(len(result.placed_orders), 1)
+        self.assertEqual(result.final_positions[0].quantity, 1)
+
+    def test_exits_continue_when_max_open_positions_reached(self) -> None:
+        # Bar 0: AAA opens, filling the only open-position slot. Bar 1:
+        # BBB's entry attempt is blocked (AAA still occupies the slot).
+        # Bar 2: AAA's stop-loss exit must still fire even though entries
+        # are exposure-blocked.
+        bars = make_symbol_bars([("AAA", 100.0), ("BBB", 100.0), ("AAA", 90.0)])
+        orchestrator, broker = make_orchestrator(
+            bars, FakeRiskManager(approve=True), "buy_once_per_symbol", BuyOncePerSymbolStrategy
+        )
+        config = make_config(
+            "buy_once_per_symbol",
+            ["AAA", "BBB"],
+            allocation_plan=make_allocation_plan(
+                max_capital_per_trade=100.0, max_open_positions=1, max_symbol_allocation=10000.0
+            ),
+            exit_policy=ExitPolicyConfig(stop_loss_pct=5.0),
+        )
+
+        result = orchestrator.run_session(config)
+
+        self.assertEqual(result.approved_signals, 1)  # AAA only
+        self.assertEqual(result.skipped_due_to_position_limits, 1)  # BBB blocked
+
+        self.assertEqual(len(result.exit_decisions), 1)
+        self.assertEqual(result.exit_decisions[0].reason, "stop_loss")
+        self.assertEqual(result.exit_decisions[0].symbol, "AAA")
+
+        aaa_position = next(p for p in result.final_positions if p.symbol == "AAA")
+        self.assertEqual(aaa_position.quantity, 0)
+        self.assertNotIn("BBB", [p.symbol for p in result.final_positions])
 
 
 if __name__ == "__main__":

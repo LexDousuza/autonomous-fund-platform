@@ -10,6 +10,7 @@ from core.broker.base import (
 from core.execution.models import ExecutionSessionResult, TradingSessionConfig
 from core.market_data.service import MarketDataService
 from core.portfolio.exit_models import ExitDecision
+from core.portfolio.exposure_guardrails import PortfolioExposureGuardrails
 from core.portfolio.position_manager import PositionManager
 from core.portfolio.sizing import PositionSizingEngine
 from core.portfolio.sizing_models import PositionSizingRequest
@@ -99,14 +100,22 @@ class ExecutionOrchestrator:
         Run one deterministic trading session over the streamed bars for
         ``config.symbols`` and return an ``ExecutionSessionResult``.
 
+        A session may cover more than one symbol: every check below is
+        keyed by ``exchange:symbol`` (exit tracking, open positions, per-
+        symbol history) except the session-level trade-count/daily-loss
+        guardrails, which are intentionally aggregated across the whole
+        session/universe, matching ``PortfolioAllocationPlan`` semantics.
+
         Steps, per bar:
         1. Evaluate exit rules (if ``config.exit_policy`` is set) for any
-           position opened in an earlier bar, place exit orders for any
-           that trigger, and feed the realized PnL from each exit into the
-           session risk guardrails. Exit processing always runs, even
-           once new entries are blocked.
+           position (in this bar's symbol) opened in an earlier bar, place
+           exit orders for any that trigger, and feed the realized PnL
+           from each exit into the session risk guardrails. Exit
+           processing always runs, even once new entries are blocked.
         2. Ask the strategy for entry signals against the now-current
-           open positions.
+           open positions, passing only *this symbol's* bar history (a
+           multi-symbol session must never let one symbol's technicals be
+           computed from another symbol's bars).
         3. For each signal, check the session risk guardrails first: once
            latched (max trades/day reached or max daily loss breached),
            further signals are skipped without sizing, a risk check, or a
@@ -115,7 +124,11 @@ class ExecutionOrchestrator:
            ``config.portfolio_allocation_plan`` and the bar's close price.
            A zero-quantity decision rejects the signal without a risk
            check or broker call.
-        5. Run a risk check for sized signals and place approved orders,
+        5. Check portfolio exposure guardrails (max open positions, max
+           capital per symbol) against the sized order's notional. A
+           blocked decision rejects the signal without a risk check or
+           broker call.
+        6. Run a risk check for sized signals and place approved orders,
            registering fills with the position manager (for future exit
            evaluation) and the session guardrails (for the trade-count
            guard).
@@ -136,7 +149,8 @@ class ExecutionOrchestrator:
         plan = config.portfolio_allocation_plan
         position_manager = PositionManager()
         session_guardrails = SessionRiskGuardrails(plan)
-        history: list[MarketBar] = []
+        exposure_guardrails = PortfolioExposureGuardrails(plan)
+        history_by_symbol: dict[str, list[MarketBar]] = {}
         used_intraday_capital = 0.0
 
         result = ExecutionSessionResult(
@@ -146,6 +160,8 @@ class ExecutionOrchestrator:
 
         for bar in self.market_data_service.stream():
             result.processed_bars += 1
+            bar_key = f"{bar.exchange}:{bar.symbol}"
+            symbol_history = history_by_symbol.setdefault(bar_key, [])
 
             if config.exit_policy is not None:
                 tracked_positions = position_manager.open_positions()
@@ -171,8 +187,11 @@ class ExecutionOrchestrator:
                 if p.quantity != 0
             }
 
-            signals = strategy.on_bar(bar=bar, history=history, open_positions=open_positions)
+            signals = strategy.on_bar(
+                bar=bar, history=symbol_history, open_positions=open_positions
+            )
             result.generated_signals += len(signals)
+            result.symbols_with_signals.update(signal.symbol for signal in signals)
 
             for signal in signals:
                 guardrail_decision = session_guardrails.check_entry_allowed()
@@ -193,6 +212,17 @@ class ExecutionOrchestrator:
                 result.sizing_decisions.append(sizing_decision)
 
                 if sizing_decision.approved_quantity <= 0:
+                    result.rejected_signals += 1
+                    continue
+
+                exposure_decision = exposure_guardrails.check_new_entry(
+                    symbol=signal.symbol,
+                    exchange=signal.exchange,
+                    proposed_notional=sizing_decision.capital_used,
+                    open_positions=open_positions,
+                )
+                if not exposure_decision.allowed:
+                    result.skipped_due_to_position_limits += 1
                     result.rejected_signals += 1
                     continue
 
@@ -234,7 +264,7 @@ class ExecutionOrchestrator:
                         strategy_name=signal.strategy_name,
                     )
 
-            history.append(bar)
+            symbol_history.append(bar)
 
         result.final_positions = self.broker.list_positions()
         result.final_session_risk_state = session_guardrails.state
