@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 from apps.live_trader.config import (
     GrowwEnvCredentials,
@@ -9,6 +10,9 @@ from apps.live_trader.config import (
     load_market_data_provider_from_env,
 )
 from core.allocations.daily_mandate import load_daily_mandate
+from core.audit.file_sink import FileAuditSink
+from core.audit.models import SessionMetadata, SessionSummary
+from core.audit.sink import AuditSink
 from core.broker.base import Broker
 from core.broker.factory import build_broker
 from core.broker.factory_models import BrokerConfig
@@ -337,15 +341,99 @@ def print_session_summary(result: ExecutionSessionResult) -> None:
     print("=== LIVE TRADER END ===")
 
 
-def run_live_session() -> ExecutionSessionResult:
-    """Build a live session, print the startup banner, run it, and print the summary."""
-    ctx = build_live_session()
-    print_startup_banner(ctx)
+def _generate_session_id() -> str:
+    """Human-sortable, unique session id: <UTC timestamp>_<short random suffix>."""
+    return f"{datetime.now(UTC):%Y%m%dT%H%M%S}_{uuid4().hex[:8]}"
 
-    result = ctx.orchestrator.run_session(ctx.session_config)
-    print_session_summary(result)
 
-    return result
+def _build_session_metadata(session_id: str, started_at: datetime, ctx: LiveSessionContext) -> SessionMetadata:
+    """
+    Build the session identity/config snapshot to persist once a full
+    ``LiveSessionContext`` is available.
+
+    Deliberately hand-picks safe fields from ``ctx.broker_config``/
+    ``ctx.market_data_config`` rather than persisting those objects'
+    ``metadata`` dicts wholesale - those carry API keys/access tokens
+    that must never reach disk. ``allocation_plan``/``exit_policy``
+    contain no secrets and are safe to persist directly.
+    """
+    return SessionMetadata(
+        session_id=session_id,
+        app_name="live_trader",
+        started_at=started_at,
+        trading_date=ctx.allocation_plan.trading_date,
+        strategy_name=ctx.session_config.strategy_name,
+        broker_provider=ctx.broker_config.provider,
+        broker_mode=ctx.broker_config.mode,
+        market_data_provider=ctx.market_data_config.provider,
+        market_data_mode=ctx.market_data_config.mode,
+        universe_name=ctx.universe.universe_name,
+        subscribed_symbols=list(ctx.session_symbols),
+        allocation_plan=ctx.allocation_plan,
+        exit_policy=ctx.session_config.exit_policy,
+    )
+
+
+def _build_session_summary(result: ExecutionSessionResult, succeeded: bool) -> SessionSummary:
+    """Compose the persisted final summary from the orchestrator's ExecutionSessionResult."""
+    return SessionSummary(
+        strategy_name=result.strategy_name,
+        trading_date=result.trading_date,
+        processed_bars=result.processed_bars,
+        generated_signals=result.generated_signals,
+        symbols_with_signals=sorted(result.symbols_with_signals),
+        approved_signals=result.approved_signals,
+        rejected_signals=result.rejected_signals,
+        skipped_due_to_session_guardrails=result.skipped_due_to_session_guardrails,
+        skipped_due_to_position_limits=result.skipped_due_to_position_limits,
+        placed_orders=result.placed_orders,
+        exit_decisions=result.exit_decisions,
+        exit_orders=result.exit_orders,
+        final_positions=result.final_positions,
+        final_session_risk_state=result.final_session_risk_state,
+        succeeded=succeeded,
+    )
+
+
+def run_live_session(audit_sink: AuditSink | None = None) -> ExecutionSessionResult:
+    """
+    Build a live session, print the startup banner, run it, and print the
+    summary - persisting a durable session record throughout.
+
+    ``audit_sink`` defaults to a real ``FileAuditSink`` (tests inject an
+    in-memory double to avoid touching the filesystem). The session
+    record is started before ``build_live_session()`` is even called, so
+    a failure there (e.g. missing credentials) is still captured, just
+    with a leaner metadata snapshot than a failure once the full session
+    context is known - see the two ``except`` blocks below.
+    """
+    sink = audit_sink if audit_sink is not None else FileAuditSink()
+    session_id = _generate_session_id()
+    started_at = datetime.now(UTC)
+
+    try:
+        ctx = build_live_session()
+    except Exception as exc:
+        sink.start_session(
+            SessionMetadata(session_id=session_id, app_name="live_trader", started_at=started_at)
+        )
+        sink.record_failure(exc)
+        raise
+
+    sink.start_session(_build_session_metadata(session_id, started_at, ctx))
+    ctx.orchestrator.audit_sink = sink
+
+    try:
+        print_startup_banner(ctx)
+
+        result = ctx.orchestrator.run_session(ctx.session_config)
+        print_session_summary(result)
+
+        sink.finalize_session(_build_session_summary(result, succeeded=True))
+        return result
+    except Exception as exc:
+        sink.record_failure(exc)
+        raise
 
 
 def main() -> None:

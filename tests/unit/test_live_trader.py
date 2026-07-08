@@ -34,6 +34,8 @@ from apps.live_trader.main import (
     print_startup_banner,
     run_live_session,
 )
+from core.audit.models import AuditEvent, SessionMetadata, SessionSummary
+from core.audit.sink import AuditSink, NullAuditSink
 from core.broker.factory_models import BrokerConfig
 from core.broker.groww_adapter import GrowwBrokerAdapter
 from core.broker.groww_errors import GrowwTransportError
@@ -47,6 +49,28 @@ VALID_ENV = {
     "GROWW_API_KEY": "test-api-key",
     "GROWW_ACCESS_TOKEN": "test-access-token",
 }
+
+
+class RecordingAuditSink(AuditSink):
+    """In-memory AuditSink test double: no file I/O, just records calls."""
+
+    def __init__(self) -> None:
+        self.started_with: SessionMetadata | None = None
+        self.events: list[AuditEvent] = []
+        self.finalized_with: SessionSummary | None = None
+        self.failed_with: BaseException | None = None
+
+    def start_session(self, metadata: SessionMetadata) -> None:
+        self.started_with = metadata
+
+    def record_event(self, event: AuditEvent) -> None:
+        self.events.append(event)
+
+    def finalize_session(self, summary: SessionSummary) -> None:
+        self.finalized_with = summary
+
+    def record_failure(self, error: BaseException) -> None:
+        self.failed_with = error
 
 
 class LoadGrowwCredentialsFromEnvTests(unittest.TestCase):
@@ -169,7 +193,11 @@ class BuildLiveSessionTests(unittest.TestCase):
         buffer = io.StringIO()
         with redirect_stdout(buffer):
             with self.assertRaises(GrowwTransportError):
-                run_live_session()
+                # NullAuditSink keeps this test hermetic (no real files
+                # written to data/live_sessions/); persistence itself is
+                # covered by AuditPersistenceLifecycleTests below and
+                # test_audit_file_sink.py.
+                run_live_session(audit_sink=NullAuditSink())
 
         self.assertIn("=== LIVE TRADER START ===", buffer.getvalue())
 
@@ -232,6 +260,66 @@ class MarketDataWiringTests(unittest.TestCase):
         ctx = build_live_session()
 
         self.assertIsInstance(ctx.orchestrator.market_data_service.active_feed, GrowwLiveMarketDataFeed)
+
+
+class AuditPersistenceLifecycleTests(unittest.TestCase):
+    """
+    Narrow tests proving run_live_session() owns the session persistence
+    lifecycle correctly: started with best-effort metadata before the
+    session context exists, enriched once it does, and failure recorded
+    (with the exception still re-raised) regardless of where in the flow
+    something goes wrong. File-based persistence mechanics are covered by
+    test_audit_file_sink.py; this only checks the app's wiring.
+    """
+
+    @patch.dict(os.environ, {"GROWW_API_KEY": "", "GROWW_ACCESS_TOKEN": ""})
+    def test_early_failure_before_context_still_starts_and_fails_the_session(self) -> None:
+        sink = RecordingAuditSink()
+
+        with self.assertRaises(MissingGrowwCredentialsError):
+            run_live_session(audit_sink=sink)
+
+        self.assertIsNotNone(sink.started_with)
+        self.assertEqual(sink.started_with.app_name, "live_trader")
+        # Context was never built, so the richer fields are still unset.
+        self.assertIsNone(sink.started_with.broker_provider)
+
+        self.assertIsInstance(sink.failed_with, MissingGrowwCredentialsError)
+        self.assertIsNone(sink.finalized_with)
+
+    @patch.dict(os.environ, {**VALID_ENV, "GROWW_BASE_URL": ""})
+    def test_mid_session_failure_records_rich_metadata_and_failure(self) -> None:
+        sink = RecordingAuditSink()
+
+        with redirect_stdout(io.StringIO()):
+            with self.assertRaises(GrowwTransportError):
+                run_live_session(audit_sink=sink)
+
+        # start_session() ran with the full context-derived snapshot.
+        self.assertIsNotNone(sink.started_with)
+        self.assertEqual(sink.started_with.broker_provider, "groww")
+        self.assertEqual(sink.started_with.broker_mode, "live")
+        self.assertTrue(sink.started_with.subscribed_symbols)
+
+        # Events recorded before the crash (subscriptions at minimum) are present.
+        self.assertTrue(sink.events)
+
+        self.assertIsInstance(sink.failed_with, GrowwTransportError)
+        self.assertIsNone(sink.finalized_with)
+
+    @patch.dict(os.environ, VALID_ENV)
+    def test_successful_session_finalizes_with_a_summary_and_never_fails(self) -> None:
+        sink = RecordingAuditSink()
+
+        with redirect_stdout(io.StringIO()):
+            with patch("apps.live_trader.main.build_broker", return_value=PaperBroker()):
+                result = run_live_session(audit_sink=sink)
+
+        self.assertIsNotNone(sink.started_with)
+        self.assertIsNotNone(sink.finalized_with)
+        self.assertTrue(sink.finalized_with.succeeded)
+        self.assertEqual(sink.finalized_with.strategy_name, result.strategy_name)
+        self.assertIsNone(sink.failed_with)
 
 
 class StartupBannerTests(unittest.TestCase):

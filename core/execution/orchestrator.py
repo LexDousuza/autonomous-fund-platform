@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from core.audit.models import AuditEvent, AuditEventType
+from core.audit.sink import AuditSink
 from core.broker.base import (
     Broker,
     OrderRequest,
@@ -79,6 +81,14 @@ class ExecutionOrchestrator:
     all external dependencies (market data, risk, broker, strategy
     registry), so a live session only needs different implementations of
     those dependencies, not a different orchestrator.
+
+    ``audit_sink`` is optional and defaults to ``None``, in which case
+    the orchestrator behaves exactly as before this was added - it never
+    knows or cares about file paths, JSONL, or any other storage detail;
+    it only ever calls ``audit_sink.record_event(...)`` at meaningful
+    decision points. Persisting a session (start/finalize/failure) is an
+    app-layer responsibility - see ``apps/live_trader/main.py`` - not the
+    orchestrator's.
     """
 
     def __init__(
@@ -88,12 +98,34 @@ class ExecutionOrchestrator:
         broker: Broker,
         strategy_registry: StrategyRegistry = default_strategy_registry,
         position_sizing_engine: PositionSizingEngine | None = None,
+        audit_sink: AuditSink | None = None,
     ) -> None:
         self.market_data_service = market_data_service
         self.risk_manager = risk_manager
         self.broker = broker
         self.strategy_registry = strategy_registry
         self.position_sizing_engine = position_sizing_engine or PositionSizingEngine()
+        self.audit_sink = audit_sink
+
+    def _emit(
+        self,
+        event_type: AuditEventType,
+        *,
+        symbol: str | None = None,
+        strategy_name: str | None = None,
+        **payload: object,
+    ) -> None:
+        """No-op if no sink was provided; otherwise builds and records one AuditEvent."""
+        if self.audit_sink is None:
+            return
+        self.audit_sink.record_event(
+            AuditEvent(
+                event_type=event_type,
+                symbol=symbol,
+                strategy_name=strategy_name,
+                payload=dict(payload),
+            )
+        )
 
     def run_session(self, config: TradingSessionConfig) -> ExecutionSessionResult:
         """
@@ -145,6 +177,11 @@ class ExecutionOrchestrator:
 
         for symbol in config.symbols:
             self.market_data_service.subscribe(symbol)
+        self._emit(
+            AuditEventType.SYMBOLS_SUBSCRIBED,
+            strategy_name=config.strategy_name,
+            symbols=list(config.symbols),
+        )
 
         plan = config.portfolio_allocation_plan
         position_manager = PositionManager()
@@ -152,11 +189,25 @@ class ExecutionOrchestrator:
         exposure_guardrails = PortfolioExposureGuardrails(plan)
         history_by_symbol: dict[str, list[MarketBar]] = {}
         used_intraday_capital = 0.0
+        guardrail_block_emitted = False
 
         result = ExecutionSessionResult(
             trading_date=config.trading_date,
             strategy_name=config.strategy_name,
         )
+
+        def emit_guardrail_block_if_newly_triggered() -> None:
+            nonlocal guardrail_block_emitted
+            if guardrail_block_emitted or not session_guardrails.state.entry_blocked:
+                return
+            self._emit(
+                AuditEventType.SESSION_ENTRY_BLOCKED,
+                strategy_name=config.strategy_name,
+                block_reason=session_guardrails.state.block_reason,
+                entries_taken=session_guardrails.state.entries_taken,
+                realized_pnl=session_guardrails.state.realized_pnl,
+            )
+            guardrail_block_emitted = True
 
         for bar in self.market_data_service.stream():
             result.processed_bars += 1
@@ -167,9 +218,28 @@ class ExecutionOrchestrator:
                 tracked_positions = position_manager.open_positions()
                 for exit_decision in position_manager.evaluate_exits(bar, config.exit_policy):
                     result.exit_decisions.append(exit_decision)
+                    self._emit(
+                        AuditEventType.EXIT_TRIGGERED,
+                        symbol=exit_decision.symbol,
+                        strategy_name=config.strategy_name,
+                        exchange=exit_decision.exchange,
+                        reason=exit_decision.reason,
+                        quantity=exit_decision.quantity,
+                        exit_price=exit_decision.exit_price,
+                    )
+
                     exit_request = build_exit_order(exit_decision, config.strategy_name)
                     exit_order = self.broker.place_order(exit_request)
                     result.exit_orders.append(exit_order)
+                    self._emit(
+                        AuditEventType.EXIT_ORDER_PLACED,
+                        symbol=exit_order.symbol,
+                        strategy_name=config.strategy_name,
+                        order_id=exit_order.order_id,
+                        status=exit_order.status.value,
+                        quantity=exit_order.quantity,
+                        average_price=exit_order.average_price,
+                    )
                     position_manager.clear(exit_decision.symbol, exit_decision.exchange)
 
                     tracked = tracked_positions.get(
@@ -180,6 +250,7 @@ class ExecutionOrchestrator:
                             exit_order.average_price - tracked.entry_price
                         ) * exit_decision.quantity
                         session_guardrails.record_realized_pnl(realized_pnl)
+                        emit_guardrail_block_if_newly_triggered()
 
             open_positions = {
                 f"{p.exchange}:{p.symbol}": p
@@ -194,10 +265,26 @@ class ExecutionOrchestrator:
             result.symbols_with_signals.update(signal.symbol for signal in signals)
 
             for signal in signals:
+                self._emit(
+                    AuditEventType.SIGNAL_GENERATED,
+                    symbol=signal.symbol,
+                    strategy_name=signal.strategy_name,
+                    side=signal.side.value,
+                    reason=signal.reason,
+                    confidence=signal.confidence,
+                )
+
                 guardrail_decision = session_guardrails.check_entry_allowed()
                 if not guardrail_decision.allowed:
                     result.skipped_due_to_session_guardrails += 1
                     result.rejected_signals += 1
+                    self._emit(
+                        AuditEventType.SIGNAL_REJECTED,
+                        symbol=signal.symbol,
+                        strategy_name=signal.strategy_name,
+                        rejection_stage="session_guardrail",
+                        reason=guardrail_decision.reason,
+                    )
                     continue
 
                 sizing_request = PositionSizingRequest(
@@ -213,6 +300,13 @@ class ExecutionOrchestrator:
 
                 if sizing_decision.approved_quantity <= 0:
                     result.rejected_signals += 1
+                    self._emit(
+                        AuditEventType.SIGNAL_REJECTED,
+                        symbol=signal.symbol,
+                        strategy_name=signal.strategy_name,
+                        rejection_stage="sizing",
+                        reason=sizing_decision.reason,
+                    )
                     continue
 
                 exposure_decision = exposure_guardrails.check_new_entry(
@@ -224,6 +318,13 @@ class ExecutionOrchestrator:
                 if not exposure_decision.allowed:
                     result.skipped_due_to_position_limits += 1
                     result.rejected_signals += 1
+                    self._emit(
+                        AuditEventType.SIGNAL_REJECTED,
+                        symbol=signal.symbol,
+                        strategy_name=signal.strategy_name,
+                        rejection_stage="exposure",
+                        reason=exposure_decision.reason,
+                    )
                     continue
 
                 order = build_order_from_signal(
@@ -245,14 +346,48 @@ class ExecutionOrchestrator:
 
                 if not decision.approved:
                     result.rejected_signals += 1
+                    self._emit(
+                        AuditEventType.SIGNAL_REJECTED,
+                        symbol=signal.symbol,
+                        strategy_name=signal.strategy_name,
+                        rejection_stage="risk_manager",
+                        reason=decision.reason,
+                    )
                     continue
 
                 result.approved_signals += 1
+                self._emit(
+                    AuditEventType.SIGNAL_APPROVED,
+                    symbol=signal.symbol,
+                    strategy_name=signal.strategy_name,
+                    quantity=sizing_decision.approved_quantity,
+                )
+
+                self._emit(
+                    AuditEventType.ORDER_SUBMITTED,
+                    symbol=order.symbol,
+                    strategy_name=config.strategy_name,
+                    side=order.side.value,
+                    quantity=order.quantity,
+                    order_type=order.order_type.value,
+                    price=order.price,
+                )
                 placed = self.broker.place_order(order)
                 result.placed_orders.append(placed)
+                self._emit(
+                    AuditEventType.ORDER_PLACED,
+                    symbol=placed.symbol,
+                    strategy_name=config.strategy_name,
+                    order_id=placed.order_id,
+                    status=placed.status.value,
+                    quantity=placed.quantity,
+                    filled_quantity=placed.filled_quantity,
+                    average_price=placed.average_price,
+                )
 
                 used_intraday_capital += (placed.average_price or 0.0) * placed.quantity
                 session_guardrails.record_entry()
+                emit_guardrail_block_if_newly_triggered()
 
                 if order.side == OrderSide.BUY:
                     position_manager.register_entry(
