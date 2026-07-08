@@ -12,3 +12,6 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 
+# Runtime session artifacts (audit logs written per live-trader/kill-switch run)
+data/live_sessions/
+

@@ -55,6 +55,16 @@ class AuditEventType(str, Enum):
     # Session risk / guardrails
     SESSION_ENTRY_BLOCKED = "session_entry_blocked"
 
+    # Kill switch / emergency flatten-all
+    KILL_SWITCH_TRIGGERED = "kill_switch_triggered"
+    KILL_SWITCH_POSITIONS_FETCH_FAILED = "kill_switch_positions_fetch_failed"
+    KILL_SWITCH_ORDER_CANCELLED = "kill_switch_order_cancelled"
+    KILL_SWITCH_ORDER_CANCEL_NOT_CONFIRMED = "kill_switch_order_cancel_not_confirmed"
+    KILL_SWITCH_ORDER_CANCEL_FAILED = "kill_switch_order_cancel_failed"
+    KILL_SWITCH_POSITION_FLATTENED = "kill_switch_position_flattened"
+    KILL_SWITCH_POSITION_FLATTEN_FAILED = "kill_switch_position_flatten_failed"
+    KILL_SWITCH_COMPLETED = "kill_switch_completed"
+
     # Errors / failures
     BROKER_ERROR = "broker_error"
     MARKET_DATA_ERROR = "market_data_error"
