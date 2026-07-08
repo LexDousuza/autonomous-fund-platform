@@ -3,7 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from core.allocations.daily_mandate import load_daily_mandate
-from core.broker.paper import PaperBroker
+from core.broker.factory import build_broker
+from core.broker.factory_models import BrokerConfig
 from core.execution.models import TradingSessionConfig
 from core.execution.orchestrator import ExecutionOrchestrator
 from core.market_data.memory_feed import MemoryMarketDataFeed
@@ -97,8 +98,12 @@ def main() -> None:
     )
     session_symbols = [instrument.symbol for instrument in session_instruments]
 
-    # 3) initialize dependencies
-    broker = PaperBroker()
+    # 3) initialize dependencies. The broker is built through the broker
+    #    factory rather than instantiated directly, so switching to Groww
+    #    paper/live later is a config change here, not a code change to
+    #    the orchestrator or this app's trading flow.
+    broker_config = BrokerConfig(provider="paper", mode="paper")
+    broker = build_broker(broker_config)
     risk_manager = SimpleIntradayRiskManager()
 
     market_data_service = MarketDataService()
@@ -141,6 +146,7 @@ def main() -> None:
     print(f"Execution mode: {allocation_plan.execution_mode}")
     print(f"Universe: {universe.universe_name}")
     print(f"Subscribed symbols ({len(session_symbols)}): {', '.join(session_symbols)}")
+    print(f"Broker: {broker_config.provider}/{broker_config.mode}")
     print()
 
     print("=== SESSION SUMMARY ===")
