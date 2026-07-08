@@ -6,8 +6,9 @@ from uuid import uuid4
 
 from apps.live_trader.config import (
     GrowwEnvCredentials,
+    LiveTraderConfig,
     load_groww_credentials_from_env,
-    load_market_data_provider_from_env,
+    load_live_trader_config_from_env,
 )
 from core.allocations.daily_mandate import load_daily_mandate
 from core.audit.file_sink import FileAuditSink
@@ -49,6 +50,7 @@ class LiveTransportNotReadyError(RuntimeError):
 class LiveSessionContext:
     """Everything needed to run (or refuse to run) a live trading session."""
 
+    live_config: LiveTraderConfig
     allocation_plan: PortfolioAllocationPlan
     universe: InstrumentUniverse
     session_instruments: list[Instrument]
@@ -144,34 +146,60 @@ def _ensure_live_transport_ready(broker: Broker) -> None:
             )
 
 
+def _build_broker_config(
+    live_config: LiveTraderConfig,
+    credentials: GrowwEnvCredentials | None,
+) -> BrokerConfig:
+    """
+    Build the ``BrokerConfig`` for ``live_config.broker_provider``.
+
+    ``"paper"`` needs no credentials at all - it's the safe default.
+    ``"groww"`` (real live broker) reuses the credentials already loaded
+    by ``build_live_session`` (only ever loaded when actually required -
+    see ``LiveTraderConfig.requires_groww_credentials``).
+    """
+    if live_config.broker_provider == "paper":
+        return BrokerConfig(provider="paper", mode="paper")
+
+    return BrokerConfig(
+        provider="groww",
+        mode=live_config.broker_mode,
+        metadata={
+            "api_key": credentials.api_key,
+            "access_token": credentials.access_token,
+            "base_url": credentials.base_url,
+        },
+    )
+
+
 def _build_market_data_config(
-    provider: str,
+    live_config: LiveTraderConfig,
     session_instruments: list[Instrument],
-    credentials: GrowwEnvCredentials,
+    credentials: GrowwEnvCredentials | None,
 ) -> MarketDataConfig:
     """
-    Build the ``MarketDataConfig`` for ``provider``.
+    Build the ``MarketDataConfig`` for ``live_config.market_data_provider``.
 
-    ``provider="groww"`` is the real live path: reuses the same Groww
-    credentials already loaded for the broker (one account, one set of
-    credentials, no separate market-data-only env vars to manage).
-    Anything else - including the default, ``"memory"`` - is the safe
-    local/dev path: deterministic demo bars, no network, no credentials
-    required. This is never a silent fallback: which path runs is decided
-    entirely by ``LIVE_MARKET_DATA_PROVIDER`` before this function is
-    called, and the chosen provider is always printed in the startup
+    ``"groww"`` is the real live path: reuses the same Groww credentials
+    already loaded for the broker check (one account, one set of
+    credentials, no separate market-data-only env vars to manage), and
+    honors ``live_config.max_bars`` as a poll-count cap if set. ``"memory"``
+    is the safe local/dev path: deterministic demo bars, no network, no
+    credentials required. This is never a silent fallback - which path
+    runs is decided entirely by ``LiveTraderConfig`` before this function
+    is called, and the chosen provider is always printed in the startup
     banner.
     """
-    if provider == "groww":
-        return MarketDataConfig(
-            provider="groww",
-            mode="live",
-            metadata={
-                "api_key": credentials.api_key,
-                "access_token": credentials.access_token,
-                "base_url": credentials.base_url,
-            },
-        )
+    if live_config.market_data_provider == "groww":
+        metadata: dict[str, object] = {
+            "api_key": credentials.api_key,
+            "access_token": credentials.access_token,
+            "base_url": credentials.base_url,
+        }
+        if live_config.max_bars is not None:
+            metadata["max_polls"] = live_config.max_bars
+
+        return MarketDataConfig(provider="groww", mode="live", metadata=metadata)
 
     return MarketDataConfig(
         provider="memory",
@@ -183,62 +211,63 @@ def _build_market_data_config(
 def build_live_session(
     mandate_path: str = MANDATE_PATH,
     universe_path: str = UNIVERSE_PATH,
+    config: LiveTraderConfig | None = None,
 ) -> LiveSessionContext:
     """
     Build everything needed for a live trading session, without running
     it.
 
+    ``config`` defaults to ``load_live_trader_config_from_env()`` - tests
+    can inject a specific ``LiveTraderConfig`` directly to exercise a
+    provider combination without patching every relevant environment
+    variable. Loading/validating the config (including the live-broker
+    confirmation gate) is always the first thing that happens, before
+    the mandate, universe, or any credential is touched.
+
     Kept separate from ``run_live_session()`` so tests can construct and
-    inspect a session - confirming credentials are loaded, the broker
-    factory is invoked with the right config, and the same core pipeline
-    the paper trader uses (allocation, universe selection, orchestrator)
-    is wired - without streaming any bars or requiring a live broker.
+    inspect a session - confirming credentials are loaded only when
+    needed, the broker factory is invoked with the right config, and the
+    same core pipeline the paper trader uses (allocation, universe
+    selection, orchestrator) is wired - without streaming any bars or
+    requiring a live broker.
     """
+    live_config = config if config is not None else load_live_trader_config_from_env()
+
     # 1) load today's mandate and derive the day's allocation plan
     mandate = load_daily_mandate(mandate_path)
     allocation_plan = build_portfolio_allocation_plan(mandate)
 
     # 2) load the configured instrument universe and select this
-    #    session's tradable symbols (same NSE-only rationale as the
-    #    paper trader: the market data feed keys bars by symbol alone).
+    #    session's tradable symbols. Exchange is configurable (default
+    #    "NSE") but still a single exchange: the market data feed keys
+    #    bars by symbol alone, not exchange+symbol.
     universe = load_instrument_universe(universe_path)
     session_instruments = TradingUniverseSelector().select(
-        universe, UniverseSelectionCriteria(exchange="NSE")
+        universe, UniverseSelectionCriteria(exchange=live_config.universe_exchange)
     )
     session_symbols = [instrument.symbol for instrument in session_instruments]
 
-    # 3) load credentials from the environment (app-level concern, not
-    #    core), and build the broker through the broker factory - never
-    #    by instantiating GrowwBrokerAdapter directly.
-    credentials = load_groww_credentials_from_env()
-    broker_config = BrokerConfig(
-        provider="groww",
-        mode="live",
-        metadata={
-            "api_key": credentials.api_key,
-            "access_token": credentials.access_token,
-            "base_url": credentials.base_url,
-        },
-    )
+    # 3) load Groww credentials ONLY if the selected broker or market-data
+    #    provider actually needs them - paper+memory needs none at all.
+    credentials: GrowwEnvCredentials | None = None
+    if live_config.requires_groww_credentials:
+        credentials = load_groww_credentials_from_env()
+
+    # 4) build the broker through the broker factory - never by
+    #    instantiating a concrete broker class directly.
+    broker_config = _build_broker_config(live_config, credentials)
     broker = build_broker(broker_config)
     _ensure_live_transport_ready(broker)
 
-    # 4) build the market data feed through the market-data factory -
-    #    never by instantiating a concrete feed directly. Provider is an
-    #    explicit environment choice (default: "memory", the safe local/
-    #    dev path); only LIVE_MARKET_DATA_PROVIDER=groww attempts real
-    #    live market data, reusing the same Groww credentials as the
-    #    broker.
-    market_data_provider = load_market_data_provider_from_env()
-    market_data_config = _build_market_data_config(
-        market_data_provider, session_instruments, credentials
-    )
+    # 5) build the market data feed through the market-data factory -
+    #    never by instantiating a concrete feed directly.
+    market_data_config = _build_market_data_config(live_config, session_instruments, credentials)
     market_data_feed = build_market_data_feed(market_data_config)
 
     market_data_service = MarketDataService()
     market_data_service.register_feed("live_session", market_data_feed)
 
-    # 5) initialize the remaining dependencies
+    # 6) initialize the remaining dependencies
     risk_manager = SimpleIntradayRiskManager()
 
     orchestrator = ExecutionOrchestrator(
@@ -247,7 +276,7 @@ def build_live_session(
         broker=broker,
     )
 
-    # 6) describe the session. execution_mode is set from broker_config,
+    # 7) describe the session. execution_mode is set from broker_config,
     #    not allocation_plan.execution_mode - the mandate describes
     #    capital/risk for the day, not which broker/mode executes it.
     exit_policy = ExitPolicyConfig(stop_loss_pct=1.5, target_pct=2.0)
@@ -263,6 +292,7 @@ def build_live_session(
     )
 
     return LiveSessionContext(
+        live_config=live_config,
         allocation_plan=allocation_plan,
         universe=universe,
         session_instruments=session_instruments,
@@ -276,15 +306,24 @@ def build_live_session(
 
 
 def print_startup_banner(ctx: LiveSessionContext) -> None:
-    """Print the live-session startup banner (trading date, capital, universe, broker, market data)."""
+    """
+    Print the pre-flight session summary: everything an operator needs
+    to confirm this is the session they intend to run, before any bar
+    is streamed or order is placed.
+    """
+    plan = ctx.allocation_plan
     print("=== LIVE TRADER START ===")
-    print(f"Trading date: {ctx.allocation_plan.trading_date}")
-    print(f"Intraday capital: {ctx.allocation_plan.intraday_capital}")
-    print(f"Execution mode: {ctx.session_config.execution_mode}")
-    print(f"Universe: {ctx.universe.universe_name}")
-    print(f"Subscribed symbols ({len(ctx.session_symbols)}): {', '.join(ctx.session_symbols)}")
+    print(f"Trading date: {plan.trading_date}")
     print(f"Broker: {ctx.broker_config.provider}/{ctx.broker_config.mode}")
     print(f"Market data: {ctx.market_data_config.provider}/{ctx.market_data_config.mode}")
+    print(f"Dry run: {ctx.live_config.dry_run}")
+    print(f"Universe: {ctx.universe.universe_name}")
+    print(f"Subscribed symbols ({len(ctx.session_symbols)}): {', '.join(ctx.session_symbols)}")
+    print(f"Intraday capital: {plan.intraday_capital}")
+    print(f"Max daily loss: {plan.max_daily_loss}")
+    print(f"Max trades/day: {plan.max_trades_per_day}")
+    print(f"Max open positions: {plan.max_open_positions}")
+    print(f"Execution mode: {ctx.session_config.execution_mode}")
     print()
 
 
@@ -395,15 +434,47 @@ def _build_session_summary(result: ExecutionSessionResult, succeeded: bool) -> S
     )
 
 
-def run_live_session(audit_sink: AuditSink | None = None) -> ExecutionSessionResult:
+def _build_dry_run_summary(ctx: LiveSessionContext) -> SessionSummary:
     """
-    Build a live session, print the startup banner, run it, and print the
-    summary - persisting a durable session record throughout.
+    A zeroed ``SessionSummary`` for a dry run: the session was fully
+    built and pre-flight-validated (mandate, universe, credentials,
+    broker, market data feed, orchestrator all constructed successfully)
+    but ``orchestrator.run_session()`` was never called, so there is no
+    real activity to report.
+    """
+    return SessionSummary(
+        strategy_name=ctx.session_config.strategy_name,
+        trading_date=ctx.session_config.trading_date,
+        processed_bars=0,
+        generated_signals=0,
+        symbols_with_signals=[],
+        approved_signals=0,
+        rejected_signals=0,
+        skipped_due_to_session_guardrails=0,
+        skipped_due_to_position_limits=0,
+        placed_orders=[],
+        exit_decisions=[],
+        exit_orders=[],
+        final_positions=[],
+        final_session_risk_state=None,
+        succeeded=True,
+    )
+
+
+def run_live_session(audit_sink: AuditSink | None = None) -> ExecutionSessionResult | None:
+    """
+    Build a live session, print the pre-flight banner, run it (unless
+    ``dry_run``), and print the summary - persisting a durable session
+    record throughout.
+
+    Returns ``None`` for a dry run (no session was actually executed);
+    otherwise the real ``ExecutionSessionResult``.
 
     ``audit_sink`` defaults to a real ``FileAuditSink`` (tests inject an
     in-memory double to avoid touching the filesystem). The session
     record is started before ``build_live_session()`` is even called, so
-    a failure there (e.g. missing credentials) is still captured, just
+    a failure there (e.g. missing credentials, an unconfirmed live
+    broker, an invalid provider combination) is still captured, just
     with a leaner metadata snapshot than a failure once the full session
     context is known - see the two ``except`` blocks below.
     """
@@ -425,6 +496,12 @@ def run_live_session(audit_sink: AuditSink | None = None) -> ExecutionSessionRes
 
     try:
         print_startup_banner(ctx)
+
+        if ctx.live_config.dry_run:
+            print("=== DRY RUN: session validated successfully, stopping before execution ===")
+            print()
+            sink.finalize_session(_build_dry_run_summary(ctx))
+            return None
 
         result = ctx.orchestrator.run_session(ctx.session_config)
         print_session_summary(result)

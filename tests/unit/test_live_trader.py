@@ -24,6 +24,8 @@ from contextlib import redirect_stdout
 from unittest.mock import patch
 
 from apps.live_trader.config import (
+    LIVE_CONFIRM_REQUIRED_VALUE,
+    LiveTradingNotConfirmedError,
     MissingGrowwCredentialsError,
     load_groww_credentials_from_env,
 )
@@ -38,16 +40,27 @@ from core.audit.models import AuditEvent, SessionMetadata, SessionSummary
 from core.audit.sink import AuditSink, NullAuditSink
 from core.broker.factory_models import BrokerConfig
 from core.broker.groww_adapter import GrowwBrokerAdapter
-from core.broker.groww_errors import GrowwTransportError
 from core.broker.groww_models import GrowwCredentials
 from core.broker.paper import PaperBroker
 from core.execution.orchestrator import ExecutionOrchestrator
+from core.market_data.errors import MarketDataTransportError
 from core.market_data.groww_live_feed import GrowwLiveMarketDataFeed
 from core.market_data.memory_feed import MemoryMarketDataFeed
 
 VALID_ENV = {
     "GROWW_API_KEY": "test-api-key",
     "GROWW_ACCESS_TOKEN": "test-access-token",
+}
+
+# Env for the real Groww live broker path: requires both credentials and
+# the explicit safety-gate confirmation string. Market data must also be
+# "groww" - "groww broker + memory data" is not a supported combination
+# (see apps/live_trader/config.py's _ALLOWED_PROVIDER_COMBINATIONS).
+GROWW_LIVE_BROKER_ENV = {
+    **VALID_ENV,
+    "LIVE_BROKER_PROVIDER": "groww",
+    "LIVE_MARKET_DATA_PROVIDER": "groww",
+    "LIVE_CONFIRM": LIVE_CONFIRM_REQUIRED_VALUE,
 }
 
 
@@ -145,15 +158,50 @@ class EnsureLiveTransportReadyTests(unittest.TestCase):
 
 
 class BuildLiveSessionTests(unittest.TestCase):
-    @patch.dict(os.environ, {"GROWW_API_KEY": "", "GROWW_ACCESS_TOKEN": ""})
-    def test_missing_credentials_fails_fast_before_touching_the_broker_factory(self) -> None:
+    @patch.dict(os.environ, {}, clear=False)
+    def test_paper_broker_and_memory_data_needs_no_credentials(self) -> None:
+        # The safe default: LIVE_BROKER_PROVIDER/LIVE_MARKET_DATA_PROVIDER
+        # both unset -> paper + memory, which must build successfully with
+        # zero Groww credentials in the environment at all.
+        for var in ("GROWW_API_KEY", "GROWW_ACCESS_TOKEN", "LIVE_BROKER_PROVIDER", "LIVE_MARKET_DATA_PROVIDER"):
+            os.environ.pop(var, None)
+
+        ctx = build_live_session()
+
+        self.assertIsInstance(ctx.broker, PaperBroker)
+        self.assertEqual(ctx.broker_config.provider, "paper")
+        self.assertEqual(ctx.market_data_config.provider, "memory")
+
+    @patch.dict(
+        os.environ,
+        {**VALID_ENV, "LIVE_BROKER_PROVIDER": "groww", "LIVE_MARKET_DATA_PROVIDER": "groww"},
+        clear=False,
+    )
+    def test_groww_live_broker_without_confirmation_is_rejected(self) -> None:
+        os.environ.pop("LIVE_CONFIRM", None)
+
+        with patch("apps.live_trader.main.build_broker") as mock_build_broker:
+            with self.assertRaises(LiveTradingNotConfirmedError):
+                build_live_session()
+
+            # Refused before ever touching the broker factory.
+            mock_build_broker.assert_not_called()
+
+    @patch.dict(os.environ, {"LIVE_MARKET_DATA_PROVIDER": "groww"})
+    def test_missing_credentials_rejected_only_when_groww_actually_selected(self) -> None:
+        # broker stays paper (default), but market data explicitly asks
+        # for groww -> credentials ARE required even though the broker
+        # itself needs none.
+        for var in ("GROWW_API_KEY", "GROWW_ACCESS_TOKEN"):
+            os.environ.pop(var, None)
+
         with patch("apps.live_trader.main.build_broker") as mock_build_broker:
             with self.assertRaises(MissingGrowwCredentialsError):
                 build_live_session()
 
             mock_build_broker.assert_not_called()
 
-    @patch.dict(os.environ, VALID_ENV)
+    @patch.dict(os.environ, GROWW_LIVE_BROKER_ENV)
     def test_broker_factory_is_invoked_with_groww_live_config(self) -> None:
         with patch(
             "apps.live_trader.main.build_broker", return_value=PaperBroker()
@@ -168,7 +216,7 @@ class BuildLiveSessionTests(unittest.TestCase):
         self.assertEqual(config.metadata["api_key"], "test-api-key")
         self.assertEqual(config.metadata["access_token"], "test-access-token")
 
-    @patch.dict(os.environ, VALID_ENV)
+    @patch.dict(os.environ, GROWW_LIVE_BROKER_ENV)
     def test_build_live_session_succeeds_with_real_factory_and_real_adapter(self) -> None:
         # No patching of build_broker here: the real factory really does
         # build a real GrowwBrokerAdapter(mode="live"). Building the
@@ -181,18 +229,20 @@ class BuildLiveSessionTests(unittest.TestCase):
         self.assertIsInstance(ctx.broker, GrowwBrokerAdapter)
         self.assertEqual(ctx.broker.mode, "live")
 
-    @patch.dict(os.environ, {**VALID_ENV, "GROWW_BASE_URL": ""})
+    @patch.dict(os.environ, {**GROWW_LIVE_BROKER_ENV, "GROWW_BASE_URL": ""})
     def test_run_live_session_fails_fast_without_a_real_endpoint(self) -> None:
         # End-to-end, with nothing mocked: real factory -> real
-        # GrowwBrokerAdapter -> real GrowwHttpTransport. The synthetic bar
-        # stream triggers a breakout signal, which the orchestrator turns
-        # into a real order placement attempt. With no real base_url
-        # configured, that fails at URL-parsing time - synchronously, zero
-        # network I/O - so this is safe to run here (see
-        # test_groww_transport.py's equivalent transport-level test).
+        # GrowwBrokerAdapter + real GrowwLiveMarketDataFeed, both backed
+        # by real (unmocked) HTTP transports. The market-data feed's
+        # stream() is the very first thing the orchestrator touches, so
+        # with no real base_url configured, *that* fails at URL-parsing
+        # time - synchronously, zero network I/O - before any broker call
+        # is even attempted (see test_groww_transport.py and
+        # test_live_market_data_feed.py for the transport-level versions
+        # of the same guarantee).
         buffer = io.StringIO()
         with redirect_stdout(buffer):
-            with self.assertRaises(GrowwTransportError):
+            with self.assertRaises(MarketDataTransportError):
                 # NullAuditSink keeps this test hermetic (no real files
                 # written to data/live_sessions/); persistence itself is
                 # covered by AuditPersistenceLifecycleTests below and
@@ -201,7 +251,7 @@ class BuildLiveSessionTests(unittest.TestCase):
 
         self.assertIn("=== LIVE TRADER START ===", buffer.getvalue())
 
-    @patch.dict(os.environ, VALID_ENV)
+    @patch.dict(os.environ, GROWW_LIVE_BROKER_ENV)
     def test_session_uses_same_core_pipeline_as_paper_trader(self) -> None:
         with patch("apps.live_trader.main.build_broker", return_value=PaperBroker()):
             ctx = build_live_session()
@@ -272,7 +322,7 @@ class AuditPersistenceLifecycleTests(unittest.TestCase):
     test_audit_file_sink.py; this only checks the app's wiring.
     """
 
-    @patch.dict(os.environ, {"GROWW_API_KEY": "", "GROWW_ACCESS_TOKEN": ""})
+    @patch.dict(os.environ, {"LIVE_MARKET_DATA_PROVIDER": "groww", "GROWW_API_KEY": "", "GROWW_ACCESS_TOKEN": ""})
     def test_early_failure_before_context_still_starts_and_fails_the_session(self) -> None:
         sink = RecordingAuditSink()
 
@@ -287,12 +337,12 @@ class AuditPersistenceLifecycleTests(unittest.TestCase):
         self.assertIsInstance(sink.failed_with, MissingGrowwCredentialsError)
         self.assertIsNone(sink.finalized_with)
 
-    @patch.dict(os.environ, {**VALID_ENV, "GROWW_BASE_URL": ""})
+    @patch.dict(os.environ, {**GROWW_LIVE_BROKER_ENV, "GROWW_BASE_URL": ""})
     def test_mid_session_failure_records_rich_metadata_and_failure(self) -> None:
         sink = RecordingAuditSink()
 
         with redirect_stdout(io.StringIO()):
-            with self.assertRaises(GrowwTransportError):
+            with self.assertRaises(MarketDataTransportError):
                 run_live_session(audit_sink=sink)
 
         # start_session() ran with the full context-derived snapshot.
@@ -304,7 +354,7 @@ class AuditPersistenceLifecycleTests(unittest.TestCase):
         # Events recorded before the crash (subscriptions at minimum) are present.
         self.assertTrue(sink.events)
 
-        self.assertIsInstance(sink.failed_with, GrowwTransportError)
+        self.assertIsInstance(sink.failed_with, MarketDataTransportError)
         self.assertIsNone(sink.finalized_with)
 
     @patch.dict(os.environ, VALID_ENV)
@@ -323,10 +373,12 @@ class AuditPersistenceLifecycleTests(unittest.TestCase):
 
 
 class StartupBannerTests(unittest.TestCase):
-    @patch.dict(os.environ, VALID_ENV)
-    def test_banner_contains_key_session_fields(self) -> None:
-        with patch("apps.live_trader.main.build_broker", return_value=PaperBroker()):
-            ctx = build_live_session()
+    @patch.dict(os.environ, {}, clear=False)
+    def test_banner_for_default_paper_and_memory_session(self) -> None:
+        for var in ("GROWW_API_KEY", "GROWW_ACCESS_TOKEN", "LIVE_BROKER_PROVIDER", "LIVE_MARKET_DATA_PROVIDER"):
+            os.environ.pop(var, None)
+
+        ctx = build_live_session()
 
         buffer = io.StringIO()
         with redirect_stdout(buffer):
@@ -336,13 +388,43 @@ class StartupBannerTests(unittest.TestCase):
         self.assertIn("=== LIVE TRADER START ===", output)
         self.assertIn(f"Trading date: {ctx.allocation_plan.trading_date}", output)
         self.assertIn(f"Intraday capital: {ctx.allocation_plan.intraday_capital}", output)
-        self.assertIn("Execution mode: live", output)
+        self.assertIn(f"Max daily loss: {ctx.allocation_plan.max_daily_loss}", output)
+        self.assertIn(f"Max trades/day: {ctx.allocation_plan.max_trades_per_day}", output)
+        self.assertIn(f"Max open positions: {ctx.allocation_plan.max_open_positions}", output)
+        self.assertIn("Dry run: False", output)
+        self.assertIn("Execution mode: paper", output)
         self.assertIn(f"Universe: {ctx.universe.universe_name}", output)
         self.assertIn(f"Subscribed symbols ({len(ctx.session_symbols)})", output)
         for symbol in ctx.session_symbols:
             self.assertIn(symbol, output)
-        self.assertIn("Broker: groww/live", output)
+        self.assertIn("Broker: paper/paper", output)
         self.assertIn("Market data: memory/paper", output)
+
+    @patch.dict(os.environ, GROWW_LIVE_BROKER_ENV)
+    def test_banner_for_groww_live_broker_session(self) -> None:
+        with patch("apps.live_trader.main.build_broker", return_value=PaperBroker()):
+            ctx = build_live_session()
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            print_startup_banner(ctx)
+        output = buffer.getvalue()
+
+        self.assertIn("Broker: groww/live", output)
+        self.assertIn("Execution mode: live", output)
+
+    @patch.dict(os.environ, {"LIVE_DRY_RUN": "true"}, clear=False)
+    def test_banner_reflects_dry_run_flag(self) -> None:
+        for var in ("GROWW_API_KEY", "GROWW_ACCESS_TOKEN", "LIVE_BROKER_PROVIDER", "LIVE_MARKET_DATA_PROVIDER"):
+            os.environ.pop(var, None)
+
+        ctx = build_live_session()
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            print_startup_banner(ctx)
+
+        self.assertIn("Dry run: True", buffer.getvalue())
 
 
 if __name__ == "__main__":
