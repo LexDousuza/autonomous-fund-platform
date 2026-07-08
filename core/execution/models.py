@@ -7,6 +7,7 @@ from typing import Any
 from core.broker.base import Order, Position
 from core.portfolio.exit_models import ExitDecision, ExitPolicyConfig
 from core.portfolio.models import PortfolioAllocationPlan
+from core.portfolio.sizing_models import PositionSizingDecision
 
 
 @dataclass(slots=True)
@@ -18,7 +19,10 @@ class TradingSessionConfig:
     one market data feed for one trading day, independent of whether the
     session is paper or live. ``exit_policy`` is optional and defaults to
     ``None``, which disables exit evaluation entirely (positions are only
-    ever opened, matching pre-exit-engine behaviour).
+    ever opened, matching pre-exit-engine behaviour). Entry order quantity
+    is not configured here: it is derived per-signal by the
+    ``PositionSizingEngine`` from ``portfolio_allocation_plan`` and the
+    triggering bar's price.
     """
 
     trading_date: date
@@ -27,7 +31,6 @@ class TradingSessionConfig:
     execution_mode: str
     symbols: list[str]
     portfolio_allocation_plan: PortfolioAllocationPlan
-    quantity_per_trade: int = 5
     exit_policy: ExitPolicyConfig | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -43,6 +46,11 @@ class ExecutionSessionResult:
     separately via ``exit_decisions`` (every rule evaluation that triggered
     an exit) and ``exit_orders`` (the resulting broker fills), so entry and
     exit flow stay clearly distinguishable and inspectable.
+    ``sizing_decisions`` holds every ``PositionSizingDecision`` made for a
+    generated signal (including ones that sized to zero and were therefore
+    never placed), so quantity decisions are auditable independently of
+    whether an order resulted. A signal that sizes to zero, or that is
+    rejected by the risk manager, is counted in ``rejected_signals``.
     """
 
     trading_date: date
@@ -52,6 +60,7 @@ class ExecutionSessionResult:
     approved_signals: int = 0
     rejected_signals: int = 0
     placed_orders: list[Order] = field(default_factory=list)
+    sizing_decisions: list[PositionSizingDecision] = field(default_factory=list)
     exit_decisions: list[ExitDecision] = field(default_factory=list)
     exit_orders: list[Order] = field(default_factory=list)
     final_positions: list[Position] = field(default_factory=list)

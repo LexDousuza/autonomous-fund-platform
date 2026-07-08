@@ -78,6 +78,9 @@ def main() -> None:
     #    it to the orchestrator
     exit_policy = ExitPolicyConfig(stop_loss_pct=1.5, target_pct=2.0)
 
+    # Order quantity is not set here: ExecutionOrchestrator derives it per
+    # signal via PositionSizingEngine, from allocation_plan.max_capital_per_trade
+    # and the triggering bar's price.
     session_config = TradingSessionConfig(
         trading_date=allocation_plan.trading_date,
         strategy_name="simple_breakout_momentum",
@@ -85,7 +88,6 @@ def main() -> None:
         execution_mode=allocation_plan.execution_mode,
         symbols=["RELIANCE"],
         portfolio_allocation_plan=allocation_plan,
-        quantity_per_trade=5,
         exit_policy=exit_policy,
     )
 
@@ -108,7 +110,7 @@ def main() -> None:
     for order in result.placed_orders:
         print(
             f"  -> id={order.order_id} status={order.status.value} "
-            f"avg_price={order.average_price}"
+            f"qty={order.quantity} avg_price={order.average_price}"
         )
     print()
 

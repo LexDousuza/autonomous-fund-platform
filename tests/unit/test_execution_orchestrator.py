@@ -98,7 +98,7 @@ def make_bars(count: int, symbol: str = "TEST") -> list[MarketBar]:
     ]
 
 
-def make_allocation_plan() -> PortfolioAllocationPlan:
+def make_allocation_plan(max_capital_per_trade: float = 15000.0) -> PortfolioAllocationPlan:
     return PortfolioAllocationPlan(
         trading_date=date(2026, 1, 1),
         total_capital=100000.0,
@@ -106,9 +106,9 @@ def make_allocation_plan() -> PortfolioAllocationPlan:
         intraday_capital=60000.0,
         max_daily_loss=2500.0,
         max_trades_per_day=6,
-        max_capital_per_trade=15000.0,
+        max_capital_per_trade=max_capital_per_trade,
         max_open_positions=4,
-        max_symbol_allocation=15000.0,
+        max_symbol_allocation=max_capital_per_trade,
         execution_mode="paper",
     )
 
@@ -159,7 +159,7 @@ def make_price_bars(closes: list[float], symbol: str = "TEST") -> list[MarketBar
 def make_config(
     strategy_name: str,
     symbols: list[str],
-    quantity_per_trade: int = 1,
+    allocation_plan: PortfolioAllocationPlan | None = None,
     exit_policy: ExitPolicyConfig | None = None,
 ) -> TradingSessionConfig:
     return TradingSessionConfig(
@@ -168,19 +168,21 @@ def make_config(
         strategy_params={},
         execution_mode="paper",
         symbols=symbols,
-        portfolio_allocation_plan=make_allocation_plan(),
-        quantity_per_trade=quantity_per_trade,
+        portfolio_allocation_plan=allocation_plan or make_allocation_plan(),
         exit_policy=exit_policy,
     )
 
 
 class ExecutionOrchestratorTests(unittest.TestCase):
     def test_signal_approved_places_order(self) -> None:
-        bars = make_bars(1)
+        bars = make_bars(1)  # bar close = 100.0
         orchestrator, broker = make_orchestrator(
             bars, FakeRiskManager(approve=True), "always_buy", AlwaysBuyStrategy
         )
-        config = make_config("always_buy", ["TEST"])
+        # max_capital_per_trade=100.0 at price=100.0 -> sizing approves qty=1
+        config = make_config(
+            "always_buy", ["TEST"], allocation_plan=make_allocation_plan(max_capital_per_trade=100.0)
+        )
 
         result = orchestrator.run_session(config)
 
@@ -227,11 +229,14 @@ class ExecutionOrchestratorTests(unittest.TestCase):
         self.assertEqual(result.final_positions, [])
 
     def test_summary_counts_across_multiple_bars(self) -> None:
-        bars = make_bars(3)
+        bars = make_bars(3)  # bar closes = 100.0, 101.0, 102.0
         orchestrator, broker = make_orchestrator(
             bars, FakeRiskManager(approve=True), "always_buy", AlwaysBuyStrategy
         )
-        config = make_config("always_buy", ["TEST"], quantity_per_trade=2)
+        # max_capital_per_trade=220.0 -> sizing approves qty=2 at each of these prices
+        config = make_config(
+            "always_buy", ["TEST"], allocation_plan=make_allocation_plan(max_capital_per_trade=220.0)
+        )
 
         result = orchestrator.run_session(config)
 
@@ -276,7 +281,7 @@ class ExecutionOrchestratorTests(unittest.TestCase):
         config = make_config(
             "buy_once",
             ["TEST"],
-            quantity_per_trade=1,
+            allocation_plan=make_allocation_plan(max_capital_per_trade=100.0),  # qty=1 at price=100
             exit_policy=ExitPolicyConfig(stop_loss_pct=5.0),
         )
 
@@ -307,7 +312,7 @@ class ExecutionOrchestratorTests(unittest.TestCase):
         config = make_config(
             "buy_once",
             ["TEST"],
-            quantity_per_trade=1,
+            allocation_plan=make_allocation_plan(max_capital_per_trade=100.0),  # qty=1 at price=100
             exit_policy=ExitPolicyConfig(target_pct=3.0),
         )
 
@@ -322,13 +327,58 @@ class ExecutionOrchestratorTests(unittest.TestCase):
         orchestrator, broker = make_orchestrator(
             bars, FakeRiskManager(approve=True), "buy_once", BuyOnceEverStrategy
         )
-        config = make_config("buy_once", ["TEST"], quantity_per_trade=1)  # exit_policy=None
+        config = make_config(
+            "buy_once", ["TEST"], allocation_plan=make_allocation_plan(max_capital_per_trade=100.0)
+        )  # exit_policy=None
 
         result = orchestrator.run_session(config)
 
         self.assertEqual(result.exit_decisions, [])
         self.assertEqual(result.exit_orders, [])
         self.assertEqual(result.final_positions[0].quantity, 1)
+
+    def test_placed_order_quantity_comes_from_sizing_engine(self) -> None:
+        # bar close = 100.0, max_capital_per_trade = 15000.0 -> floor(15000/2500) = 6
+        bars = make_price_bars([2500.0])
+        orchestrator, broker = make_orchestrator(
+            bars, FakeRiskManager(approve=True), "always_buy", AlwaysBuyStrategy
+        )
+        config = make_config(
+            "always_buy", ["TEST"], allocation_plan=make_allocation_plan(max_capital_per_trade=15000.0)
+        )
+
+        result = orchestrator.run_session(config)
+
+        self.assertEqual(len(result.sizing_decisions), 1)
+        self.assertEqual(result.sizing_decisions[0].approved_quantity, 6)
+        self.assertEqual(result.sizing_decisions[0].capital_used, 15000.0)
+        self.assertEqual(result.sizing_decisions[0].reason, "approved")
+
+        self.assertEqual(len(result.placed_orders), 1)
+        self.assertEqual(result.placed_orders[0].quantity, 6)
+        self.assertEqual(result.final_positions[0].quantity, 6)
+
+    def test_signal_rejected_when_sizing_yields_zero_quantity(self) -> None:
+        # price=150.0 cannot afford even 1 share of a 100.0 capital budget
+        bars = make_price_bars([150.0])
+        orchestrator, broker = make_orchestrator(
+            bars, FakeRiskManager(approve=True), "always_buy", AlwaysBuyStrategy
+        )
+        config = make_config(
+            "always_buy", ["TEST"], allocation_plan=make_allocation_plan(max_capital_per_trade=100.0)
+        )
+
+        result = orchestrator.run_session(config)
+
+        self.assertEqual(result.generated_signals, 1)
+        self.assertEqual(result.approved_signals, 0)
+        self.assertEqual(result.rejected_signals, 1)
+        self.assertEqual(result.placed_orders, [])
+        self.assertEqual(broker.list_positions(), [])
+
+        self.assertEqual(len(result.sizing_decisions), 1)
+        self.assertEqual(result.sizing_decisions[0].approved_quantity, 0)
+        self.assertEqual(result.sizing_decisions[0].reason, "price_exceeds_capital_per_trade")
 
 
 if __name__ == "__main__":

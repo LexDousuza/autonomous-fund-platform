@@ -7,6 +7,8 @@ from core.portfolio.exit_models import ExitDecision, ExitPolicyConfig, PositionS
 from core.portfolio.exits import ExitPolicyEvaluator
 from core.portfolio.models import PortfolioAllocationPlan
 from core.portfolio.position_manager import PositionManager, TrackedPosition
+from core.portfolio.sizing import PositionSizingEngine
+from core.portfolio.sizing_models import PositionSizingDecision, PositionSizingRequest
 
 __all__ = [
     "PortfolioAllocationPlan",
@@ -19,4 +21,7 @@ __all__ = [
     "ExitPolicyEvaluator",
     "PositionManager",
     "TrackedPosition",
+    "PositionSizingRequest",
+    "PositionSizingDecision",
+    "PositionSizingEngine",
 ]

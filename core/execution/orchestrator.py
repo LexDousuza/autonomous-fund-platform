@@ -11,6 +11,8 @@ from core.execution.models import ExecutionSessionResult, TradingSessionConfig
 from core.market_data.service import MarketDataService
 from core.portfolio.exit_models import ExitDecision
 from core.portfolio.position_manager import PositionManager
+from core.portfolio.sizing import PositionSizingEngine
+from core.portfolio.sizing_models import PositionSizingRequest
 from core.risk.base import RiskContext, RiskManager
 from core.strategy.base import MarketBar, SignalSide, StrategyContext, TradeSignal
 from core.strategy.registry import StrategyRegistry
@@ -83,11 +85,13 @@ class ExecutionOrchestrator:
         risk_manager: RiskManager,
         broker: Broker,
         strategy_registry: StrategyRegistry = default_strategy_registry,
+        position_sizing_engine: PositionSizingEngine | None = None,
     ) -> None:
         self.market_data_service = market_data_service
         self.risk_manager = risk_manager
         self.broker = broker
         self.strategy_registry = strategy_registry
+        self.position_sizing_engine = position_sizing_engine or PositionSizingEngine()
 
     def run_session(self, config: TradingSessionConfig) -> ExecutionSessionResult:
         """
@@ -100,7 +104,11 @@ class ExecutionOrchestrator:
            any that trigger.
         2. Ask the strategy for entry signals against the now-current
            open positions.
-        3. Run a risk check for each signal and place approved orders,
+        3. For each signal, size it via the ``PositionSizingEngine``
+           against ``config.portfolio_allocation_plan`` and the bar's
+           close price. A zero-quantity decision rejects the signal
+           without a risk check or broker call.
+        4. Run a risk check for sized signals and place approved orders,
            registering fills with the position manager so future bars can
            evaluate exits for them.
 
@@ -150,9 +158,24 @@ class ExecutionOrchestrator:
             result.generated_signals += len(signals)
 
             for signal in signals:
+                sizing_request = PositionSizingRequest(
+                    symbol=signal.symbol,
+                    exchange=signal.exchange,
+                    side=signal.side,
+                    price=bar.close,
+                    portfolio_allocation_plan=plan,
+                    strategy_metadata=signal.metadata,
+                )
+                sizing_decision = self.position_sizing_engine.size(sizing_request)
+                result.sizing_decisions.append(sizing_decision)
+
+                if sizing_decision.approved_quantity <= 0:
+                    result.rejected_signals += 1
+                    continue
+
                 order = build_order_from_signal(
                     signal,
-                    quantity=config.quantity_per_trade,
+                    quantity=sizing_decision.approved_quantity,
                     price=bar.close,
                 )
 
