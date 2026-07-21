@@ -23,13 +23,26 @@ class PaperBroker(Broker):
     - fills them immediately
     - stores order history
     - updates positions in memory
+    - is idempotent on ``OrderRequest.client_order_id`` when set (see
+      ``core/execution/idempotency.py``): a repeated ``place_order()``
+      call with the same ``client_order_id`` returns the original fill
+      instead of creating a second one and double-applying it to
+      positions - this is what a real broker enforcing order-reference-id
+      deduplication would look like from the caller's side, and lets that
+      guarantee be exercised in tests without a real Groww account.
     """
 
     def __init__(self) -> None:
         self._orders: dict[str, Order] = {}
         self._positions: dict[tuple[str, str], Position] = {}
+        self._orders_by_client_id: dict[str, str] = {}
 
     def place_order(self, order_request: OrderRequest) -> Order:
+        if order_request.client_order_id is not None:
+            existing_order_id = self._orders_by_client_id.get(order_request.client_order_id)
+            if existing_order_id is not None:
+                return self._orders[existing_order_id]
+
         now = datetime.now()
         order_id = str(uuid4())
 
@@ -57,6 +70,8 @@ class PaperBroker(Broker):
 
         self._orders[order_id] = order
         self._apply_fill_to_positions(order)
+        if order_request.client_order_id is not None:
+            self._orders_by_client_id[order_request.client_order_id] = order_id
 
         return order
 
