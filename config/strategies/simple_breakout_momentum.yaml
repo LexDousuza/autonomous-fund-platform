@@ -1,8 +1,13 @@
 strategy:
   name: simple_breakout_momentum
 
+# breakout_lookback_bars=5: a multi-day synthetic backtest (see
+# core/backtest/) showed lookback=5 consistently beating lookback=1 on
+# profit factor and max drawdown - comparing against just 1 prior bar
+# reacts to single-bar noise rather than a real breakout. Synthetic-data
+# finding, not a real-market performance claim.
 params:
-  breakout_lookback_bars: 1
+  breakout_lookback_bars: 5
   min_volume_multiplier: 1.0
   allow_multiple_entries: false
   quantity_per_trade: 5

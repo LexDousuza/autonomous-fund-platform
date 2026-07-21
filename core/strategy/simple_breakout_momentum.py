@@ -17,6 +17,16 @@ class SimpleBreakoutMomentumStrategy(Strategy):
     - breakout_lookback_bars: int
     - min_volume_multiplier: float
     - allow_multiple_entries: bool
+
+    Default ``breakout_lookback_bars`` is 5, not 1: a backtest run across
+    8 symbols x 30 synthetic trading days (both a pure random walk and a
+    momentum-structured variant - see core/backtest/synthetic_data.py)
+    showed lookback=5 consistently beating lookback=1 on profit factor
+    and max drawdown in every scenario tested, since comparing against
+    only the single prior bar reacts to single-bar noise rather than a
+    real breakout. This is a synthetic-data finding, not a claim about
+    real-market performance - see apps/backtester/run_backtest.py's
+    printed disclaimer for synthetic-data results.
     """
 
     def __init__(self, context: StrategyContext) -> None:
@@ -30,7 +40,7 @@ class SimpleBreakoutMomentumStrategy(Strategy):
     ) -> list[TradeSignal]:
         params = self.context.parameters or {}
 
-        breakout_lookback_bars = int(params.get("breakout_lookback_bars", 1))
+        breakout_lookback_bars = int(params.get("breakout_lookback_bars", 5))
         min_volume_multiplier = float(params.get("min_volume_multiplier", 1.0))
         allow_multiple_entries = bool(params.get("allow_multiple_entries", False))
 

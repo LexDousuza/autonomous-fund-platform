@@ -1,13 +1,18 @@
-trading_date: "2026-07-07"
+trading_date: "2026-07-21"
 
 buckets:
-  reserve_bucket: 40000
-  intraday_bucket: 60000
+  reserve_bucket: 10000.0
+  intraday_bucket: 10000.0
 
 risk_limits:
-  max_daily_loss: 2500
-  max_trades_per_day: 6
+  max_daily_loss: 1000.0
+  max_trades_per_day: 50
   stop_new_entries_after: "14:45"
-  force_square_off_at: "15:20"
+  force_square_off_at: "15:15"
 
 execution_mode: "paper"
+
+# "conservative", "moderate", or "aggressive" - drives capital/risk-aware
+# stock bucket selection (core/market_data/bucket_selector.py). Defaults
+# to "moderate" if omitted.
+risk_appetite: "moderate"
