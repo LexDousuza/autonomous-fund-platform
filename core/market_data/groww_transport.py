@@ -1,156 +1,228 @@
 """
-Groww market-data HTTP transport V1.
+Groww market-data transport V1 - wraps the official ``growwapi`` SDK.
 
-This is the only place in ``core/market_data/`` that knows about URLs,
-auth headers, timeouts, raw request execution, and raw JSON decoding for
-Groww's market-data endpoints. It has no knowledge of this platform's
-domain objects (``MarketBar``) - it takes/returns plain ``dict`` JSON
-payloads. ``GrowwLiveMarketDataFeed`` owns turning those payloads into
-``MarketBar`` instances; this module must stay ignorant of that mapping.
+Verified against Groww's official documentation and the installed
+``growwapi`` package itself (v1.5.0) - not guessed. Specifically:
+
+- Auth: identical exchange as the broker side (see
+  ``core/broker/groww_transport.py``) - ``GrowwAPI.get_access_token(api_key,
+  secret=secret)`` then ``GrowwAPI(token)``.
+- ``get_quote`` response shape: https://groww.in/trade-api/docs/python-sdk/live-data
+- ``get_historical_candles`` request shape and per-interval max lookback
+  window: https://groww.in/trade-api/docs/python-sdk/historical-data
+  (the exact V2 response shape used by ``get_historical_candles`` itself
+  was not shown with a literal example on that page - only its
+  predecessor, ``get_historical_candle_data``, was. Both are documented
+  as returning the same conceptual candle data; ``groww_historical_feed.py``
+  assumes the same array-based candle shape and flags this as the one
+  remaining not-fully-verified piece.)
 
 Deliberately independent of ``core/broker/groww_transport.py``: market
-data and order execution are different concerns (potentially different
-auth scopes, definitely different endpoints/response shapes), and this
-keeps ``core/market_data/`` fully self-contained with no dependency on
+data and order execution are different concerns, and this keeps
+``core/market_data/`` fully self-contained with no dependency on
 ``core/broker/``. The two modules share a design pattern (config
-dataclass + isolated raw-HTTP seam + explicit error hierarchy) rather
-than code.
-
-IMPORTANT ASSUMPTION: Groww's exact market-data endpoint path, auth
-header scheme, and JSON quote payload shape are not verified against
-real Groww API documentation as part of this task (no network access, no
-real credentials). They are isolated below (as class-level constants and
-in ``GrowwLiveMarketDataFeed``'s parsing) so they are easy to find and
-correct once real API docs are available.
+dataclass + isolated SDK-wrapping seam + explicit error hierarchy)
+rather than code.
 """
 
 from __future__ import annotations
 
-import json
-import urllib.error
-import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypeVar
+
+from growwapi import GrowwAPI
+from growwapi.groww.exceptions import (
+    GrowwAPIAuthenticationException,
+    GrowwAPIAuthorisationException,
+    GrowwAPIException,
+)
 
 from core.market_data.errors import (
     MarketDataAuthenticationError,
     MarketDataProviderError,
     MarketDataTransportError,
 )
+from core.utils.resilience import CircuitBreaker, CircuitOpenError, RetryPolicy, retry_with_backoff
+from core.utils.totp import generate_totp
+
+# This platform only trades NSE/BSE cash equities in V1 (see CLAUDE.md) -
+# every call is scoped to the CASH segment.
+_SEGMENT = GrowwAPI.SEGMENT_CASH
+
+_RETRY_POLICY = RetryPolicy()
+
+_T = TypeVar("_T")
+
+
+def _is_retryable(exc: Exception) -> bool:
+    """
+    Retry a pure transport failure (network/timeout) or a 5xx/429 API
+    response - never an auth failure (retrying bad credentials just
+    wastes time) and never an ordinary 4xx (the request itself is
+    wrong, retrying it won't change that).
+    """
+    if isinstance(exc, MarketDataAuthenticationError):
+        return False
+    if isinstance(exc, MarketDataProviderError):
+        return exc.status_code is None or exc.status_code >= 500 or exc.status_code == 429
+    return isinstance(exc, MarketDataTransportError)
 
 
 @dataclass(frozen=True)
 class GrowwMarketDataCredentials:
-    """API credentials for authenticating against Groww's market-data API."""
+    """
+    API credentials for authenticating against Groww's market-data API.
+
+    ``api_key`` + ``secret`` are the two values Groww's "Generate TOTP
+    token" dashboard flow hands out together - ``secret`` is a base32
+    TOTP seed, not a static password; see
+    ``core/broker/groww_transport.py``'s ``GrowwCredentials`` docstring
+    for the full explanation (same pattern on the order-execution side).
+    """
 
     api_key: str
-    access_token: str
+    secret: str
 
 
 @dataclass(frozen=True)
 class GrowwMarketDataTransportConfig:
-    """Everything ``GrowwMarketDataTransport`` needs: where to send requests, how to authenticate, how long to wait."""
+    """Everything ``GrowwMarketDataTransport`` needs: credentials and how long to wait per call."""
 
-    base_url: str
     credentials: GrowwMarketDataCredentials
     timeout_seconds: float = 10.0
 
 
+def _translate_exception(exc: Exception, action: str) -> MarketDataTransportError:
+    """Map a real ``growwapi`` exception onto this platform's own ``MarketDataError`` hierarchy."""
+    if isinstance(exc, (GrowwAPIAuthenticationException, GrowwAPIAuthorisationException)):
+        return MarketDataAuthenticationError(
+            f"Groww market data authentication failed during {action}: {exc}"
+        )
+    if isinstance(exc, GrowwAPIException):
+        return MarketDataProviderError(
+            f"Groww market data API returned an error during {action}: {exc}",
+            status_code=int(exc.code) if str(exc.code).isdigit() else None,
+        )
+    return MarketDataTransportError(f"Groww market data request failed during {action}: {exc}")
+
+
 class GrowwMarketDataTransport:
     """
-    Low-level HTTP client for Groww's market-data endpoints.
+    Thin wrapper around ``growwapi.GrowwAPI`` for market-data calls.
 
     Every public method sends one request and returns the decoded JSON
-    body as a ``dict``. Non-2xx responses, connection failures/timeouts,
-    and malformed/non-object JSON bodies all raise a
-    ``MarketDataTransportError`` subclass rather than returning ``None``
-    or a partial result.
+    body as a ``dict``, matching the previous raw-HTTP transport's
+    contract exactly - ``GrowwLiveMarketDataFeed``/
+    ``GrowwHistoricalMarketDataFeed`` are unaffected by this class's
+    internals. Auth happens once, at construction, so a bad credential
+    fails fast before any quote/candle call is attempted.
+
+    Both calls are pure reads, so both retry with backoff on a transient
+    failure, and both share one ``CircuitBreaker`` across the transport
+    instance - repeated failures on either call trip the same breaker,
+    since a down market-data provider affects both the same way (see
+    ``core/broker/groww_transport.py``'s equivalent for the same pattern
+    on the order-execution side, where writes additionally never retry).
     """
 
-    # Placeholder endpoint path - see module docstring.
-    _GET_QUOTE_PATH = "/v1/market-data/quote"
-
-    def __init__(self, config: GrowwMarketDataTransportConfig) -> None:
+    def __init__(
+        self, config: GrowwMarketDataTransportConfig, client: GrowwAPI | None = None
+    ) -> None:
         self._config = config
+        self._circuit_breaker = CircuitBreaker()
+        self._client = client if client is not None else self._authenticate(config)
 
-    # -- public HTTP operations -------------------------------------------
+    def _authenticate(self, config: GrowwMarketDataTransportConfig) -> GrowwAPI:
+        def do_auth() -> GrowwAPI:
+            try:
+                token = GrowwAPI.get_access_token(
+                    api_key=config.credentials.api_key,
+                    totp=generate_totp(config.credentials.secret),
+                )
+            except Exception as exc:  # noqa: BLE001 - translated into our own hierarchy below
+                raise _translate_exception(exc, "authentication") from exc
+            return GrowwAPI(token)
 
-    def get_quote(self, symbol: str, exchange: str) -> dict[str, Any]:
-        """Fetch the latest quote/candle for ``symbol`` on ``exchange``."""
-        path = f"{self._GET_QUOTE_PATH}?symbol={symbol}&exchange={exchange}"
-        return self._request("GET", path)
+        return retry_with_backoff(do_auth, policy=_RETRY_POLICY, is_retryable=_is_retryable)
 
-    # -- request plumbing ---------------------------------------------------
+    def _call(self, action: str, fn: Callable[[], _T]) -> _T:
+        def guarded() -> _T:
+            try:
+                return fn()
+            except Exception as exc:  # noqa: BLE001
+                raise _translate_exception(exc, action) from exc
 
-    def _auth_headers(self) -> dict[str, str]:
-        """
-        Build auth headers for every request.
-
-        Assumed scheme (see module docstring): bearer access token plus a
-        separate API key header - the same assumed shape used by the
-        broker-side transport, for consistency, though these are
-        independent credentials/config objects.
-        """
-        return {
-            "Authorization": f"Bearer {self._config.credentials.access_token}",
-            "X-API-KEY": self._config.credentials.api_key,
-            "Accept": "application/json",
-        }
-
-    def _request(self, method: str, path: str) -> dict[str, Any]:
-        url = f"{self._config.base_url.rstrip('/')}{path}"
-        headers = self._auth_headers()
-
-        status_code, raw_body = self._execute_request(method, url, headers)
-
-        if not (200 <= status_code < 300):
-            self._raise_for_status(method, path, status_code, raw_body)
-
-        return self._parse_json(method, path, raw_body)
-
-    def _execute_request(self, method: str, url: str, headers: dict[str, str]) -> tuple[int, str]:
-        """
-        Perform the raw HTTP call and return ``(status_code, raw_response_text)``.
-
-        Isolated as its own method - the only place ``urllib`` is used -
-        so tests can substitute a fake implementation without touching
-        real sockets, and so every network-level failure mode is handled
-        in exactly one place.
-        """
         try:
-            request = urllib.request.Request(url, headers=headers, method=method)
-            with urllib.request.urlopen(request, timeout=self._config.timeout_seconds) as response:
-                return response.status, response.read().decode("utf-8")
-        except urllib.error.HTTPError as exc:
-            return exc.code, exc.read().decode("utf-8")
-        except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
-            raise MarketDataTransportError(f"Groww market data request failed: {method} {url}: {exc}") from exc
-
-    def _raise_for_status(self, method: str, path: str, status_code: int, raw_body: str) -> None:
-        if status_code in (401, 403):
-            raise MarketDataAuthenticationError(
-                f"Groww market data authentication failed for {method} {path} (status={status_code})",
-                status_code=status_code,
-                response_body=raw_body,
+            return self._circuit_breaker.call(
+                lambda: retry_with_backoff(guarded, policy=_RETRY_POLICY, is_retryable=_is_retryable)
             )
-        raise MarketDataProviderError(
-            f"Groww market data API returned an error for {method} {path} (status={status_code})",
-            status_code=status_code,
-            response_body=raw_body,
-        )
-
-    def _parse_json(self, method: str, path: str, raw_body: str) -> dict[str, Any]:
-        try:
-            data = json.loads(raw_body)
-        except json.JSONDecodeError as exc:
+        except CircuitOpenError as exc:
             raise MarketDataTransportError(
-                f"Groww market data response for {method} {path} was not valid JSON: {exc}"
+                f"Groww market data circuit open, refusing {action}: {exc}"
             ) from exc
 
-        if not isinstance(data, dict):
-            raise MarketDataTransportError(
-                f"Groww market data response for {method} {path} was not a JSON object "
-                f"(got {type(data).__name__})"
-            )
+    # -- public operations -------------------------------------------
 
-        return data
+    def get_quote(self, symbol: str, exchange: str) -> dict[str, Any]:
+        """Fetch the latest quote for ``symbol`` on ``exchange``."""
+        return self._call(
+            "get_quote",
+            lambda: self._client.get_quote(
+                exchange=exchange,
+                segment=_SEGMENT,
+                trading_symbol=symbol,
+                timeout=self._config.timeout_seconds,
+            ),
+        )
+
+    def get_historical_candles(
+        self,
+        symbol: str,
+        exchange: str,
+        interval: str,
+        from_date: str,
+        to_date: str,
+    ) -> dict[str, Any]:
+        """
+        Fetch historical OHLCV candles for ``symbol`` on ``exchange``.
+
+        ``from_date``/``to_date`` must already be in Groww's required
+        ``"yyyy-MM-dd HH:mm:ss"`` format (see
+        ``GrowwHistoricalMarketDataFeed``, which builds them) -
+        ``groww_symbol`` (Groww's combined ``"EXCHANGE-SYMBOL"`` format,
+        e.g. ``"NSE-RELIANCE"``) is built here, since joining
+        exchange+symbol into that wire format is a Groww-specific detail
+        this transport owns, not the feed.
+        """
+        groww_symbol = f"{exchange}-{symbol}"
+        return self._call(
+            "get_historical_candles",
+            lambda: self._client.get_historical_candles(
+                exchange=exchange,
+                segment=_SEGMENT,
+                groww_symbol=groww_symbol,
+                start_time=from_date,
+                end_time=to_date,
+                candle_interval=interval,
+                timeout=self._config.timeout_seconds,
+            ),
+        )
+
+    def list_all_instruments(self) -> list[dict[str, Any]]:
+        """
+        Fetch Groww's full instrument master: identifiers (trading_symbol,
+        exchange, segment, series, isin, ...) and lot size/tick size for
+        every listed instrument across all exchanges/segments - NOT
+        fundamentals, market cap, or volume data (see
+        ``core/market_data/universe_screener.py`` for what screens on top
+        of this).
+
+        The SDK's ``get_all_instruments()`` returns a pandas ``DataFrame``;
+        converted to plain dicts here (one per row) so the rest of the
+        codebase never needs to depend on pandas directly, matching every
+        other transport method here returning plain dict/list data.
+        """
+        return self._call(
+            "get_all_instruments", lambda: self._client.get_all_instruments().to_dict("records")
+        )

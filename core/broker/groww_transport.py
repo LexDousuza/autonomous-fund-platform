@@ -1,164 +1,197 @@
 """
-Groww HTTP transport V1.
+Groww transport V1 - wraps the official ``growwapi`` SDK.
 
-This is the *only* place in the codebase that knows about URLs, auth
-headers, timeouts, raw request execution, and raw JSON decoding for the
-Groww API. It has no knowledge of this platform's domain objects
-(``Order``, ``Position``, ...) - it takes/returns plain ``dict`` JSON
-payloads. ``GrowwBrokerAdapter`` (and ``groww_models.py``'s ``from_*_json``
-parsers) own turning those payloads into broker-domain models; this
-module must stay ignorant of that mapping.
+Verified against Groww's official documentation and the installed
+``growwapi`` package itself (v1.5.0) - not guessed. Specifically:
 
-IMPORTANT ASSUMPTION: Groww's exact endpoint paths, auth header scheme,
-and JSON payload shapes are not verified against real Groww API
-documentation as part of this task (no network access, no real
-credentials). The paths/headers below are a reasonable, clearly-isolated
-placeholder shape (grouped as class-level constants) so they are easy to
-find and correct once real API docs are available - do not treat them as
-confirmed-correct without verification.
+- Auth: ``GrowwAPI.get_access_token(api_key, secret=secret)`` exchanges
+  an API key + secret (the credentials Groww's dashboard actually
+  generates - see ``groww_models.py``) for a short-lived access token;
+  ``GrowwAPI(token)`` is then the authenticated client every other call
+  goes through. Source: https://groww.in/trade-api/docs/python-sdk
+- Order/position field names and the full ``order_status`` vocabulary:
+  https://groww.in/trade-api/docs/python-sdk/orders and
+  https://groww.in/trade-api/docs/python-sdk/annexures
+- Positions response shape: https://groww.in/trade-api/docs/python-sdk/portfolio
+
+This is the only place in ``core/broker/`` that imports ``growwapi``
+directly - ``GrowwBrokerAdapter`` and ``groww_models.py`` only ever see
+plain ``dict`` JSON payloads (mirroring the previous raw-HTTP transport's
+contract), so swapping the underlying SDK again later would not require
+touching the adapter.
 """
 
 from __future__ import annotations
 
-import json
-import urllib.error
-import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from growwapi import GrowwAPI
+from growwapi.groww.exceptions import (
+    GrowwAPIAuthenticationException,
+    GrowwAPIAuthorisationException,
+    GrowwAPIException,
+)
+
 from core.broker.groww_errors import GrowwApiError, GrowwAuthenticationError, GrowwTransportError
 from core.broker.groww_models import GrowwCredentials
+from core.utils.resilience import CircuitBreaker, CircuitOpenError, RetryPolicy, retry_with_backoff
+from core.utils.totp import generate_totp
+
+# This platform only trades NSE/BSE cash equities in V1 (see CLAUDE.md) -
+# every call is scoped to the CASH segment so F&O/commodity positions a
+# Groww account might also hold never leak into this platform's view.
+_SEGMENT = GrowwAPI.SEGMENT_CASH
+
+_RETRY_POLICY = RetryPolicy()
+
+
+def _is_retryable(exc: Exception) -> bool:
+    """
+    Retry a pure transport failure (network/timeout) or a 5xx/429 API
+    response - never an auth failure (retrying bad credentials just
+    wastes time) and never an ordinary 4xx (the request itself is
+    wrong, retrying it won't change that).
+    """
+    if isinstance(exc, GrowwAuthenticationError):
+        return False
+    if isinstance(exc, GrowwApiError):
+        return exc.status_code is None or exc.status_code >= 500 or exc.status_code == 429
+    return isinstance(exc, GrowwTransportError)
 
 
 @dataclass(frozen=True)
 class GrowwTransportConfig:
-    """Everything ``GrowwHttpTransport`` needs: where to send requests, how to authenticate, how long to wait."""
+    """Everything ``GrowwHttpTransport`` needs: credentials and how long to wait per call."""
 
-    base_url: str
     credentials: GrowwCredentials
     timeout_seconds: float = 10.0
 
 
+def _translate_exception(exc: Exception, action: str) -> GrowwTransportError:
+    """
+    Map a real ``growwapi`` exception onto this platform's own
+    ``GrowwError`` hierarchy, so nothing outside this module needs to
+    know the SDK's exception types exist - matching how the previous
+    raw-HTTP transport translated status codes.
+    """
+    if isinstance(exc, (GrowwAPIAuthenticationException, GrowwAPIAuthorisationException)):
+        return GrowwAuthenticationError(f"Groww authentication failed during {action}: {exc}")
+    if isinstance(exc, GrowwAPIException):
+        return GrowwApiError(
+            f"Groww API returned an error during {action}: {exc}",
+            status_code=int(exc.code) if str(exc.code).isdigit() else None,
+        )
+    return GrowwTransportError(f"Groww request failed during {action}: {exc}")
+
+
 class GrowwHttpTransport:
     """
-    Low-level HTTP client for the Groww API.
+    Thin wrapper around ``growwapi.GrowwAPI``.
 
     Every public method sends one request and returns the decoded JSON
-    body as a ``dict``. Non-2xx responses, connection failures/timeouts,
-    and malformed/non-object JSON bodies all raise a ``GrowwTransportError``
-    subclass rather than returning ``None`` or a partial result.
+    body as a ``dict``, so ``GrowwBrokerAdapter``/``groww_models.py`` are
+    unaffected by this class's internals - matching the previous raw-HTTP
+    transport's contract exactly. Auth (the api_key+secret -> access
+    token exchange) happens once, at construction, so a bad credential
+    fails fast before any order/position call is attempted.
+
+    Every call goes through one ``CircuitBreaker`` shared across the
+    whole transport instance: if Groww is down, it's down for every
+    endpoint, so repeated failures on any call trip the same breaker and
+    every subsequent call (read or write) fails fast instead of piling
+    up timeouts. Reads (``get_order``/``list_positions``) additionally
+    retry with backoff - safe, since re-fetching state can't duplicate
+    anything. Writes (``place_order``/``cancel_order``) never
+    auto-retry: Groww's idempotent-submission guarantees for a retried
+    write aren't verified, and a spurious duplicate order is a strictly
+    worse failure mode than a fast, visible error the caller must decide
+    how to handle.
     """
 
-    # Placeholder endpoint paths - see module docstring.
-    _PLACE_ORDER_PATH = "/v1/order/create"
-    _CANCEL_ORDER_PATH = "/v1/order/{order_id}/cancel"
-    _GET_ORDER_PATH = "/v1/order/{order_id}"
-    _LIST_POSITIONS_PATH = "/v1/positions"
-
-    def __init__(self, config: GrowwTransportConfig) -> None:
+    def __init__(self, config: GrowwTransportConfig, client: GrowwAPI | None = None) -> None:
         self._config = config
+        self._circuit_breaker = CircuitBreaker()
+        self._client = client if client is not None else self._authenticate(config)
 
-    # -- public HTTP operations -------------------------------------------
+    def _authenticate(self, config: GrowwTransportConfig) -> GrowwAPI:
+        def do_auth() -> GrowwAPI:
+            try:
+                token = GrowwAPI.get_access_token(
+                    api_key=config.credentials.api_key,
+                    totp=generate_totp(config.credentials.secret),
+                )
+            except Exception as exc:  # noqa: BLE001 - translated into our own hierarchy below
+                raise _translate_exception(exc, "authentication") from exc
+            return GrowwAPI(token)
+
+        return retry_with_backoff(do_auth, policy=_RETRY_POLICY, is_retryable=_is_retryable)
+
+    def _call(self, action: str, fn: Callable[[], dict[str, Any]], *, retryable: bool) -> dict[str, Any]:
+        def guarded() -> dict[str, Any]:
+            try:
+                return fn()
+            except Exception as exc:  # noqa: BLE001
+                raise _translate_exception(exc, action) from exc
+
+        attempt: Callable[[], dict[str, Any]] = (
+            (lambda: retry_with_backoff(guarded, policy=_RETRY_POLICY, is_retryable=_is_retryable))
+            if retryable
+            else guarded
+        )
+        try:
+            return self._circuit_breaker.call(attempt)
+        except CircuitOpenError as exc:
+            raise GrowwTransportError(f"Groww circuit open, refusing {action}: {exc}") from exc
+
+    # -- public operations ---------------------------------------------------
 
     def place_order(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """POST a new order payload; returns the decoded JSON response."""
-        return self._request("POST", self._PLACE_ORDER_PATH, json_body=payload)
-
-    def cancel_order(self, order_id: str) -> dict[str, Any]:
-        """Cancel an existing order by id; returns the decoded JSON response."""
-        return self._request("POST", self._CANCEL_ORDER_PATH.format(order_id=order_id))
-
-    def get_order(self, order_id: str) -> dict[str, Any]:
-        """Fetch full current state of an order by id."""
-        return self._request("GET", self._GET_ORDER_PATH.format(order_id=order_id))
-
-    def list_positions(self) -> dict[str, Any]:
-        """Fetch all current positions. Assumed shape: ``{"positions": [...]}``."""
-        return self._request("GET", self._LIST_POSITIONS_PATH)
-
-    # -- request plumbing ---------------------------------------------------
-
-    def _auth_headers(self) -> dict[str, str]:
-        """
-        Build auth headers for every request.
-
-        Assumed scheme (see module docstring): bearer access token plus a
-        separate API key header. Adjust here, in one place, once the real
-        Groww auth scheme is confirmed.
-        """
-        return {
-            "Authorization": f"Bearer {self._config.credentials.access_token}",
-            "X-API-KEY": self._config.credentials.api_key,
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        }
-
-    def _request(
-        self,
-        method: str,
-        path: str,
-        json_body: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        url = f"{self._config.base_url.rstrip('/')}{path}"
-        headers = self._auth_headers()
-        body = json.dumps(json_body).encode("utf-8") if json_body is not None else None
-
-        status_code, raw_body = self._execute_request(method, url, headers, body)
-
-        if not (200 <= status_code < 300):
-            self._raise_for_status(method, path, status_code, raw_body)
-
-        return self._parse_json(method, path, raw_body)
-
-    def _execute_request(
-        self,
-        method: str,
-        url: str,
-        headers: dict[str, str],
-        body: bytes | None,
-    ) -> tuple[int, str]:
-        """
-        Perform the raw HTTP call and return ``(status_code, raw_response_text)``.
-
-        Isolated as its own method - the only place ``urllib`` is used -
-        so tests can substitute a fake implementation without touching
-        real sockets, and so every network-level failure mode is handled
-        in exactly one place.
-        """
-        try:
-            request = urllib.request.Request(url, data=body, headers=headers, method=method)
-            with urllib.request.urlopen(request, timeout=self._config.timeout_seconds) as response:
-                return response.status, response.read().decode("utf-8")
-        except urllib.error.HTTPError as exc:
-            return exc.code, exc.read().decode("utf-8")
-        except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
-            raise GrowwTransportError(f"Groww request failed: {method} {url}: {exc}") from exc
-
-    def _raise_for_status(self, method: str, path: str, status_code: int, raw_body: str) -> None:
-        if status_code in (401, 403):
-            raise GrowwAuthenticationError(
-                f"Groww authentication failed for {method} {path} (status={status_code})",
-                status_code=status_code,
-                response_body=raw_body,
-            )
-        raise GrowwApiError(
-            f"Groww API returned an error for {method} {path} (status={status_code})",
-            status_code=status_code,
-            response_body=raw_body,
+        """Place a new order. ``payload`` keys match ``GrowwAPI.place_order``'s kwargs."""
+        return self._call(
+            "place_order",
+            lambda: self._client.place_order(
+                segment=_SEGMENT, timeout=self._config.timeout_seconds, **payload
+            ),
+            retryable=False,
         )
 
-    def _parse_json(self, method: str, path: str, raw_body: str) -> dict[str, Any]:
-        try:
-            data = json.loads(raw_body)
-        except json.JSONDecodeError as exc:
-            raise GrowwTransportError(
-                f"Groww response for {method} {path} was not valid JSON: {exc}"
-            ) from exc
+    def cancel_order(self, order_id: str) -> dict[str, Any]:
+        """Cancel an existing order by id."""
+        return self._call(
+            "cancel_order",
+            lambda: self._client.cancel_order(
+                groww_order_id=order_id, segment=_SEGMENT, timeout=self._config.timeout_seconds
+            ),
+            retryable=False,
+        )
 
-        if not isinstance(data, dict):
-            raise GrowwTransportError(
-                f"Groww response for {method} {path} was not a JSON object "
-                f"(got {type(data).__name__})"
-            )
+    def get_order(self, order_id: str) -> dict[str, Any]:
+        """
+        Fetch full current state of an order by id.
 
-        return data
+        Deliberately calls ``get_order_detail`` rather than
+        ``get_order_status``: the latter's verified response only
+        carries id/status/remark/filled_quantity, not enough to populate
+        this platform's ``Order`` model (symbol/exchange/side/type/
+        product/quantity are all required fields there) - only
+        ``get_order_detail`` returns the full order shape.
+        """
+        return self._call(
+            "get_order",
+            lambda: self._client.get_order_detail(
+                groww_order_id=order_id, segment=_SEGMENT, timeout=self._config.timeout_seconds
+            ),
+            retryable=True,
+        )
+
+    def list_positions(self) -> dict[str, Any]:
+        """Fetch all current cash-segment positions. Verified shape: ``{"positions": [...]}``."""
+        return self._call(
+            "list_positions",
+            lambda: self._client.get_positions_for_user(
+                segment=_SEGMENT, timeout=self._config.timeout_seconds
+            ),
+            retryable=True,
+        )

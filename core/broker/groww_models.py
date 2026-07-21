@@ -8,12 +8,14 @@ the broker-independent models in ``core/broker/base.py`` (``OrderRequest``,
 between the two.
 
 The ``from_*_json`` classmethods below parse the raw ``dict`` payloads
-returned by ``GrowwHttpTransport`` into these dataclasses. Payload shapes
-are assumed (not verified against real Groww API docs - see
-``groww_transport.py``'s module docstring); a missing required field
-raises ``GrowwTransportError`` rather than silently defaulting, so a
-shape mismatch is loud and immediate instead of producing a corrupted
-``Order``/``Position``.
+returned by ``GrowwHttpTransport`` (which itself wraps the official
+``growwapi`` SDK - see that module's docstring) into these dataclasses.
+Field names are verified against Groww's official API docs
+(https://groww.in/trade-api/docs/python-sdk/orders and
+.../portfolio) and the installed SDK source, not guessed. A missing
+required field still raises ``GrowwTransportError`` rather than silently
+defaulting, so an actual future shape change is loud and immediate
+instead of producing a corrupted ``Order``/``Position``.
 """
 
 from __future__ import annotations
@@ -26,15 +28,45 @@ from core.broker.groww_errors import GrowwTransportError
 
 @dataclass(frozen=True)
 class GrowwCredentials:
-    """API credentials for authenticating against the Groww API."""
+    """
+    API credentials for authenticating against the Groww API.
+
+    ``api_key`` + ``secret`` are the two values Groww's dashboard hands
+    out together from its "Generate TOTP token" flow - ``secret`` is a
+    base32 TOTP seed (the value shown under the TOTP QR code), not a
+    static password: a live 6-digit code is computed from it at call
+    time (see ``core/utils/totp.py``) and exchanged, along with
+    ``api_key``, for a short-lived access token via
+    ``GrowwAPI.get_access_token()`` - see ``groww_transport.py``. This
+    was confirmed against the installed growwapi SDK's own source after
+    the plain-secret assumption failed against a real account (SDK
+    accepts either a live ``totp`` or a static ``secret``, and Groww's
+    TOTP-flow dashboard only ever gives you the former).
+    """
 
     api_key: str
-    access_token: str
+    secret: str
 
 
 @dataclass(frozen=True)
 class GrowwOrderRequest:
-    """Outbound order payload shape, built from an internal ``OrderRequest``."""
+    """
+    Outbound order payload shape, built from an internal ``OrderRequest``.
+
+    ``validity`` has no equivalent in this platform's broker-independent
+    ``OrderRequest`` - ``GrowwBrokerAdapter`` fills it in with a fixed V1
+    default (``VALIDITY_DAY``) when building this model, since the
+    platform doesn't expose it as a per-order concept yet. ``segment`` is
+    not modeled per-order at all: ``GrowwHttpTransport`` fixes every call
+    to the cash segment (see that module's ``_SEGMENT`` constant), since
+    this platform is cash-equities-only in V1.
+
+    ``order_reference_id`` carries ``OrderRequest.client_order_id``
+    through verbatim (see ``core/execution/idempotency.py``) - Groww's
+    own real request field for the same purpose. Left ``None`` when the
+    caller didn't set one, in which case Groww's SDK generates its own
+    random reference id.
+    """
 
     exchange: str
     symbol: str
@@ -42,26 +74,30 @@ class GrowwOrderRequest:
     quantity: int
     order_type: str
     product_type: str
+    validity: str
     price: float | None = None
     trigger_price: float | None = None
+    order_reference_id: str | None = None
 
 
 @dataclass(frozen=True)
 class GrowwOrderResponse:
     """
-    Order state as returned by Groww, for both a placement response and a
-    full order fetch.
+    Order state as returned by Groww, for a placement/cancel response or a
+    full order-detail fetch.
 
     ``symbol``/``exchange``/``side``/``order_type``/``product_type``/
-    ``quantity`` are optional because a placement response only needs to
-    carry the order-id/status/fill fields (the adapter already knows the
-    rest from the ``OrderRequest`` it just sent); a fetched order
-    (``get_order``) always populates them, since there is no original
-    request to fall back on.
+    ``quantity`` are optional: Groww's verified place-order response only
+    carries ``groww_order_id``/``order_status``/``order_reference_id``/
+    ``remark`` (the adapter already knows the rest from the
+    ``OrderRequest`` it just sent) - only the full order-detail fetch
+    (``get_order_detail``, used by ``get_order()``) returns them, since
+    there is no original request to fall back on there.
     """
 
     order_id: str
     status: str
+    order_reference_id: str | None = None
     average_price: float | None = None
     filled_quantity: int = 0
     symbol: str | None = None
@@ -75,15 +111,20 @@ class GrowwOrderResponse:
     @classmethod
     def from_place_order_json(cls, data: dict[str, Any]) -> "GrowwOrderResponse":
         """
-        Parse a place-order transport response.
+        Parse a place-order response.
 
-        Assumed shape: ``{"order_id": str, "status": str,
-        "average_price": float | None, "filled_quantity": int}``.
+        Verified shape (https://groww.in/trade-api/docs/python-sdk/orders):
+        ``{"groww_order_id": str, "order_status": str,
+        "order_reference_id": str, "remark": str}``. ``average_price``/
+        ``filled_quantity`` are not part of the documented shape (a
+        freshly-placed order often has no fill yet) but are read
+        defensively in case Groww returns them for an instant fill.
         """
         try:
             return cls(
-                order_id=data["order_id"],
-                status=data["status"],
+                order_id=data["groww_order_id"],
+                status=data["order_status"],
+                order_reference_id=data.get("order_reference_id"),
                 average_price=data.get("average_price"),
                 filled_quantity=int(data.get("filled_quantity", 0)),
                 raw_response=data,
@@ -94,33 +135,35 @@ class GrowwOrderResponse:
             ) from exc
 
     @classmethod
-    def from_get_order_json(cls, data: dict[str, Any]) -> "GrowwOrderResponse":
+    def from_order_detail_json(cls, data: dict[str, Any]) -> "GrowwOrderResponse":
         """
-        Parse a get-order transport response.
+        Parse a ``get_order_detail`` response.
 
         Unlike a placement response, a fetched order carries no original
         ``OrderRequest`` to fall back on, so the full order shape is
-        required here. Assumed shape adds ``symbol``, ``exchange``,
-        ``side``, ``order_type``, ``product_type``, ``quantity`` to the
-        placement fields above.
+        required here. Verified shape (same docs page): adds
+        ``trading_symbol``, ``exchange``, ``transaction_type``,
+        ``order_type``, ``product``, ``quantity``, ``average_fill_price``
+        to the placement fields above.
         """
         try:
             return cls(
-                order_id=data["order_id"],
-                status=data["status"],
-                average_price=data.get("average_price"),
+                order_id=data["groww_order_id"],
+                status=data["order_status"],
+                order_reference_id=data.get("order_reference_id"),
+                average_price=data.get("average_fill_price"),
                 filled_quantity=int(data.get("filled_quantity", 0)),
-                symbol=data["symbol"],
+                symbol=data["trading_symbol"],
                 exchange=data["exchange"],
-                side=data["side"],
+                side=data["transaction_type"],
                 order_type=data["order_type"],
-                product_type=data["product_type"],
+                product_type=data["product"],
                 quantity=int(data["quantity"]),
                 raw_response=data,
             )
         except KeyError as exc:
             raise GrowwTransportError(
-                f"Malformed Groww get-order response, missing field: {exc}"
+                f"Malformed Groww order-detail response, missing field: {exc}"
             ) from exc
 
 
@@ -134,9 +177,14 @@ class GrowwCancelResponse:
 
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> "GrowwCancelResponse":
-        """Parse a cancel-order transport response. Assumed shape: ``{"order_id": str, "status": str}``."""
+        """
+        Parse a cancel-order response.
+
+        Verified shape (https://groww.in/trade-api/docs/python-sdk/orders):
+        ``{"groww_order_id": str, "order_status": str}``.
+        """
         try:
-            return cls(order_id=data["order_id"], status=data["status"], raw_response=data)
+            return cls(order_id=data["groww_order_id"], status=data["order_status"], raw_response=data)
         except KeyError as exc:
             raise GrowwTransportError(
                 f"Malformed Groww cancel-order response, missing field: {exc}"
@@ -148,11 +196,10 @@ class GrowwPosition:
     """
     A single open position as returned by Groww.
 
-    ``product_type`` is assumed to already be normalized to this
-    platform's ``ProductType`` vocabulary (``"INTRADAY"``/``"DELIVERY"``);
-    translating Groww's own raw product codes (e.g. ``"MIS"``, ``"CNC"``)
-    into that vocabulary is assumed to already have happened by the time
-    this model is built, not something this model does itself.
+    ``product_type`` still carries Groww's raw product code (``"MIS"``/
+    ``"CNC"``) here, not this platform's ``ProductType`` vocabulary -
+    ``GrowwBrokerAdapter._map_position`` does that translation, this
+    model just captures the wire shape as-is.
     """
 
     symbol: str
@@ -168,21 +215,25 @@ class GrowwPosition:
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> "GrowwPosition":
         """
-        Parse a single position entry from a list-positions transport
-        response. Assumed shape: ``{"symbol": str, "exchange": str,
-        "quantity": int, "average_price": float, "product_type": str,
-        "last_price"/"unrealized_pnl"/"realized_pnl": float | None}``.
+        Parse a single position entry from ``get_positions_for_user``'s
+        response.
+
+        Verified shape (https://groww.in/trade-api/docs/python-sdk/portfolio):
+        ``{"trading_symbol", "exchange", "quantity", "net_price",
+        "product", "realised_pnl", ...}`` (plus credit/debit/carry-forward
+        detail this platform doesn't use). Groww's positions response has
+        no live last_price/unrealized_pnl - those stay ``None`` here; a
+        caller wanting live valuation would need a separate quote call,
+        which this adapter does not make automatically.
         """
         try:
             return cls(
-                symbol=data["symbol"],
+                symbol=data["trading_symbol"],
                 exchange=data["exchange"],
                 quantity=int(data["quantity"]),
-                average_price=float(data["average_price"]),
-                product_type=data["product_type"],
-                last_price=data.get("last_price"),
-                unrealized_pnl=data.get("unrealized_pnl"),
-                realized_pnl=data.get("realized_pnl"),
+                average_price=float(data["net_price"]),
+                product_type=data["product"],
+                realized_pnl=data.get("realised_pnl"),
                 raw_response=data,
             )
         except KeyError as exc:

@@ -1,235 +1,251 @@
 """
 Unit tests for core.broker.groww_transport.
 
-These tests never touch a real socket: ``GrowwHttpTransport._execute_request``
-is the sole seam that performs raw HTTP I/O, so tests substitute a fake
-implementation of it to simulate success, HTTP error, timeout/connection
-failure, and malformed-response scenarios deterministically.
+These tests never touch a real socket or the real Groww API. Functional
+tests inject a fake client shaped like ``growwapi.GrowwAPI`` directly
+(via ``GrowwHttpTransport(config, client=...)``), bypassing authentication
+entirely - important because, unlike the old raw-HTTP transport, this one
+authenticates *at construction time* by calling the real
+``GrowwAPI.get_access_token`` (which itself calls a real, hardcoded Groww
+URL) unless a client is injected. The authentication exchange itself is
+tested separately by mocking ``GrowwAPI.get_access_token`` directly.
 
 Run with:
     PYTHONPATH=. python -m unittest tests/unit/test_groww_transport.py -v
 """
 from __future__ import annotations
 
-import json
 import unittest
+from unittest.mock import patch
+
+from growwapi import GrowwAPI
+from growwapi.groww.exceptions import GrowwAPIAuthenticationException, GrowwAPIBadRequestException
 
 from core.broker.groww_errors import GrowwApiError, GrowwAuthenticationError, GrowwTransportError
 from core.broker.groww_models import GrowwCredentials
 from core.broker.groww_transport import GrowwHttpTransport, GrowwTransportConfig
 
 
-def make_transport(base_url: str = "https://api.groww.example") -> GrowwHttpTransport:
+class FakeGrowwClient:
+    """Test double matching the subset of growwapi.GrowwAPI's interface this transport uses."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict]] = []
+        self.responses: dict[str, object] = {}
+
+    def _record(self, name: str, kwargs: dict) -> object:
+        self.calls.append((name, kwargs))
+        response = self.responses.get(name)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    def place_order(self, **kwargs):
+        return self._record("place_order", kwargs)
+
+    def cancel_order(self, **kwargs):
+        return self._record("cancel_order", kwargs)
+
+    def get_order_detail(self, **kwargs):
+        return self._record("get_order_detail", kwargs)
+
+    def get_positions_for_user(self, **kwargs):
+        return self._record("get_positions_for_user", kwargs)
+
+
+def make_transport(client: FakeGrowwClient | None = None) -> tuple[GrowwHttpTransport, FakeGrowwClient]:
+    client = client or FakeGrowwClient()
     config = GrowwTransportConfig(
-        base_url=base_url,
-        credentials=GrowwCredentials(api_key="test-api-key", access_token="test-access-token"),
+        credentials=GrowwCredentials(api_key="test-api-key", secret="test-secret"),
         timeout_seconds=5.0,
     )
-    return GrowwHttpTransport(config)
+    return GrowwHttpTransport(config, client=client), client
 
 
-class GrowwHttpTransportAuthHeaderTests(unittest.TestCase):
-    def test_builds_auth_headers_correctly(self) -> None:
-        transport = make_transport()
+class GrowwHttpTransportAuthenticationTests(unittest.TestCase):
+    @patch("core.broker.groww_transport.generate_totp", return_value="123456")
+    @patch.object(GrowwAPI, "get_access_token")
+    def test_constructs_authenticated_client_from_api_key_and_totp(
+        self, mock_get_token, mock_generate_totp
+    ) -> None:
+        mock_get_token.return_value = "real-token-value"
 
-        headers = transport._auth_headers()
+        config = GrowwTransportConfig(credentials=GrowwCredentials(api_key="k", secret="s"))
+        transport = GrowwHttpTransport(config)
 
-        self.assertEqual(headers["Authorization"], "Bearer test-access-token")
-        self.assertEqual(headers["X-API-KEY"], "test-api-key")
-        self.assertEqual(headers["Content-Type"], "application/json")
+        mock_generate_totp.assert_called_once_with("s")
+        mock_get_token.assert_called_once_with(api_key="k", totp="123456")
+        self.assertIsInstance(transport._client, GrowwAPI)
+
+    @patch("core.broker.groww_transport.generate_totp", return_value="123456")
+    @patch.object(GrowwAPI, "get_access_token")
+    def test_authentication_failure_is_translated_to_our_error_hierarchy(
+        self, mock_get_token, mock_generate_totp
+    ) -> None:
+        mock_get_token.side_effect = GrowwAPIAuthenticationException()
+
+        config = GrowwTransportConfig(credentials=GrowwCredentials(api_key="k", secret="bad-secret"))
+
+        with self.assertRaises(GrowwAuthenticationError):
+            GrowwHttpTransport(config)
+
+    def test_injected_client_skips_authentication_entirely(self) -> None:
+        client = FakeGrowwClient()
+        transport, _ = make_transport(client)
+        self.assertIs(transport._client, client)
 
 
 class GrowwHttpTransportSuccessPathTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.transport = make_transport()
-        self.captured_calls: list[tuple[str, str, dict, bytes | None]] = []
+    def test_place_order_forwards_payload_and_fixed_segment_to_the_client(self) -> None:
+        transport, client = make_transport()
+        client.responses["place_order"] = {"groww_order_id": "GRW-1", "order_status": "NEW"}
 
-    def _install_fake_execute(self, status_code: int, body: str) -> None:
-        def fake_execute(method, url, headers, body_bytes):
-            self.captured_calls.append((method, url, headers, body_bytes))
-            return status_code, body
-
-        self.transport._execute_request = fake_execute  # type: ignore[method-assign]
-
-    def test_place_order_sends_expected_post_request_and_parses_response(self) -> None:
-        self._install_fake_execute(
-            200, json.dumps({"order_id": "GRW-1", "status": "NEW", "filled_quantity": 0})
+        result = transport.place_order(
+            {
+                "trading_symbol": "RELIANCE",
+                "exchange": "NSE",
+                "transaction_type": "BUY",
+                "quantity": 5,
+            }
         )
 
-        result = self.transport.place_order(
-            {"symbol": "RELIANCE", "exchange": "NSE", "side": "BUY", "quantity": 5}
-        )
+        self.assertEqual(result, {"groww_order_id": "GRW-1", "order_status": "NEW"})
+        name, kwargs = client.calls[0]
+        self.assertEqual(name, "place_order")
+        self.assertEqual(kwargs["trading_symbol"], "RELIANCE")
+        self.assertEqual(kwargs["quantity"], 5)
+        self.assertEqual(kwargs["segment"], GrowwAPI.SEGMENT_CASH)
 
-        self.assertEqual(result, {"order_id": "GRW-1", "status": "NEW", "filled_quantity": 0})
+    def test_cancel_order_forwards_order_id_and_segment(self) -> None:
+        transport, client = make_transport()
+        client.responses["cancel_order"] = {"groww_order_id": "GRW-2", "order_status": "CANCELLED"}
 
-        method, url, headers, body_bytes = self.captured_calls[0]
-        self.assertEqual(method, "POST")
-        self.assertTrue(url.endswith("/v1/order/create"))
-        self.assertEqual(headers["Authorization"], "Bearer test-access-token")
-        sent_payload = json.loads(body_bytes.decode("utf-8"))
-        self.assertEqual(sent_payload["symbol"], "RELIANCE")
-        self.assertEqual(sent_payload["quantity"], 5)
+        result = transport.cancel_order("GRW-2")
 
-    def test_cancel_order_sends_expected_request_and_parses_response(self) -> None:
-        self._install_fake_execute(200, json.dumps({"order_id": "GRW-2", "status": "CANCELLED"}))
+        self.assertEqual(result["order_status"], "CANCELLED")
+        name, kwargs = client.calls[0]
+        self.assertEqual(name, "cancel_order")
+        self.assertEqual(kwargs["groww_order_id"], "GRW-2")
+        self.assertEqual(kwargs["segment"], GrowwAPI.SEGMENT_CASH)
 
-        result = self.transport.cancel_order("GRW-2")
+    def test_get_order_calls_get_order_detail_not_get_order_status(self) -> None:
+        # get_order_status's verified response shape lacks symbol/exchange/
+        # side/order_type/product/quantity - not enough to build an Order.
+        transport, client = make_transport()
+        client.responses["get_order_detail"] = {"groww_order_id": "GRW-3", "order_status": "EXECUTED"}
 
-        self.assertEqual(result, {"order_id": "GRW-2", "status": "CANCELLED"})
-        method, url, _headers, body_bytes = self.captured_calls[0]
-        self.assertEqual(method, "POST")
-        self.assertTrue(url.endswith("/v1/order/GRW-2/cancel"))
-        self.assertIsNone(body_bytes)
+        result = transport.get_order("GRW-3")
 
-    def test_get_order_sends_expected_get_request_and_parses_response(self) -> None:
-        self._install_fake_execute(
-            200,
-            json.dumps(
-                {
-                    "order_id": "GRW-3",
-                    "status": "FILLED",
-                    "symbol": "TCS",
-                    "exchange": "NSE",
-                    "side": "SELL",
-                    "order_type": "LIMIT",
-                    "product_type": "DELIVERY",
-                    "quantity": 10,
-                    "filled_quantity": 10,
-                    "average_price": 3800.0,
-                }
-            ),
-        )
+        self.assertEqual(result["order_status"], "EXECUTED")
+        name, kwargs = client.calls[0]
+        self.assertEqual(name, "get_order_detail")
+        self.assertEqual(kwargs["groww_order_id"], "GRW-3")
 
-        result = self.transport.get_order("GRW-3")
+    def test_list_positions_scopes_to_cash_segment(self) -> None:
+        transport, client = make_transport()
+        client.responses["get_positions_for_user"] = {"positions": []}
 
-        self.assertEqual(result["symbol"], "TCS")
-        self.assertEqual(result["status"], "FILLED")
-        method, url, _headers, body_bytes = self.captured_calls[0]
-        self.assertEqual(method, "GET")
-        self.assertTrue(url.endswith("/v1/order/GRW-3"))
-        self.assertIsNone(body_bytes)
+        result = transport.list_positions()
 
-    def test_list_positions_sends_expected_get_request_and_parses_response(self) -> None:
-        self._install_fake_execute(
-            200,
-            json.dumps(
-                {
-                    "positions": [
-                        {
-                            "symbol": "RELIANCE",
-                            "exchange": "NSE",
-                            "quantity": 10,
-                            "average_price": 2500.0,
-                            "product_type": "INTRADAY",
-                        }
-                    ]
-                }
-            ),
-        )
-
-        result = self.transport.list_positions()
-
-        self.assertEqual(len(result["positions"]), 1)
-        self.assertEqual(result["positions"][0]["symbol"], "RELIANCE")
-        method, url, _headers, body_bytes = self.captured_calls[0]
-        self.assertEqual(method, "GET")
-        self.assertTrue(url.endswith("/v1/positions"))
-        self.assertIsNone(body_bytes)
-
-    def test_base_url_trailing_slash_is_normalized(self) -> None:
-        transport = make_transport(base_url="https://api.groww.example/")
-        captured = {}
-
-        def fake_execute(method, url, headers, body_bytes):
-            captured["url"] = url
-            return 200, json.dumps({"positions": []})
-
-        transport._execute_request = fake_execute  # type: ignore[method-assign]
-        transport.list_positions()
-
-        self.assertEqual(captured["url"], "https://api.groww.example/v1/positions")
+        self.assertEqual(result, {"positions": []})
+        name, kwargs = client.calls[0]
+        self.assertEqual(name, "get_positions_for_user")
+        self.assertEqual(kwargs["segment"], GrowwAPI.SEGMENT_CASH)
 
 
 class GrowwHttpTransportErrorPathTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.transport = make_transport()
-
-    def test_non_2xx_response_raises_groww_api_error(self) -> None:
-        self.transport._execute_request = lambda method, url, headers, body: (  # type: ignore[method-assign]
-            500,
-            json.dumps({"error": "internal_error"}),
-        )
+    def test_growwapi_exception_is_translated_to_groww_api_error(self) -> None:
+        transport, client = make_transport()
+        client.responses["get_positions_for_user"] = GrowwAPIBadRequestException()
 
         with self.assertRaises(GrowwApiError) as ctx:
-            self.transport.list_positions()
+            transport.list_positions()
 
-        self.assertEqual(ctx.exception.status_code, 500)
-        self.assertIn("internal_error", ctx.exception.response_body)
+        self.assertEqual(ctx.exception.status_code, 400)
 
-    def test_401_response_raises_groww_authentication_error(self) -> None:
-        self.transport._execute_request = lambda method, url, headers, body: (  # type: ignore[method-assign]
-            401,
-            json.dumps({"error": "invalid_token"}),
-        )
-
-        with self.assertRaises(GrowwAuthenticationError) as ctx:
-            self.transport.get_order("GRW-1")
-
-        self.assertEqual(ctx.exception.status_code, 401)
-
-    def test_403_response_raises_groww_authentication_error(self) -> None:
-        self.transport._execute_request = lambda method, url, headers, body: (  # type: ignore[method-assign]
-            403,
-            "{}",
-        )
+    def test_authentication_style_exception_is_translated_to_authentication_error(self) -> None:
+        transport, client = make_transport()
+        client.responses["get_order_detail"] = GrowwAPIAuthenticationException()
 
         with self.assertRaises(GrowwAuthenticationError):
-            self.transport.cancel_order("GRW-1")
+            transport.get_order("GRW-1")
 
     def test_authentication_error_is_also_an_api_error(self) -> None:
-        # GrowwAuthenticationError should be catchable as GrowwApiError too.
-        self.transport._execute_request = lambda method, url, headers, body: (401, "{}")  # type: ignore[method-assign]
+        transport, client = make_transport()
+        client.responses["get_order_detail"] = GrowwAPIAuthenticationException()
 
         with self.assertRaises(GrowwApiError):
-            self.transport.get_order("GRW-1")
+            transport.get_order("GRW-1")
 
-    def test_connection_failure_raises_groww_transport_error(self) -> None:
-        def fake_execute(method, url, headers, body):
-            raise GrowwTransportError(f"Groww request failed: {method} {url}: connection refused")
-
-        self.transport._execute_request = fake_execute  # type: ignore[method-assign]
+    def test_unexpected_exception_is_translated_to_groww_transport_error(self) -> None:
+        transport, client = make_transport()
+        client.responses["place_order"] = RuntimeError("connection refused")
 
         with self.assertRaises(GrowwTransportError):
-            self.transport.place_order({"symbol": "RELIANCE"})
+            transport.place_order({"trading_symbol": "RELIANCE"})
 
-    def test_invalid_json_raises_groww_transport_error(self) -> None:
-        self.transport._execute_request = lambda method, url, headers, body: (  # type: ignore[method-assign]
-            200,
-            "not-valid-json{{{",
+
+class _FlakyThenOkClient(FakeGrowwClient):
+    """Fails ``fail_times`` times with a retryable error, then succeeds."""
+
+    def __init__(self, fail_times: int, exc: Exception, ok_response: object) -> None:
+        super().__init__()
+        self._remaining_failures = fail_times
+        self._exc = exc
+        self._ok_response = ok_response
+
+    def get_order_detail(self, **kwargs):
+        self.calls.append(("get_order_detail", kwargs))
+        if self._remaining_failures > 0:
+            self._remaining_failures -= 1
+            raise self._exc
+        return self._ok_response
+
+
+class _AlwaysBadRequestClient(FakeGrowwClient):
+    """Every call fails with a non-retryable 400 - fails fast, no backoff sleep."""
+
+    def get_positions_for_user(self, **kwargs):
+        self.calls.append(("get_positions_for_user", kwargs))
+        raise GrowwAPIBadRequestException()
+
+
+class GrowwHttpTransportResilienceTests(unittest.TestCase):
+    def test_read_call_retries_transient_failure_then_succeeds(self) -> None:
+        client = _FlakyThenOkClient(
+            fail_times=1, exc=RuntimeError("timeout"), ok_response={"order_id": "GRW-1"}
         )
+        transport, _ = make_transport(client)
 
-        with self.assertRaises(GrowwTransportError):
-            self.transport.get_order("GRW-1")
+        result = transport.get_order("GRW-1")  # must not raise - retries once, then succeeds
 
-    def test_non_object_json_raises_groww_transport_error(self) -> None:
-        self.transport._execute_request = lambda method, url, headers, body: (  # type: ignore[method-assign]
-            200,
-            json.dumps([1, 2, 3]),
-        )
+        self.assertEqual(result, {"order_id": "GRW-1"})
+        self.assertEqual(len(client.calls), 2)
 
-        with self.assertRaises(GrowwTransportError):
-            self.transport.list_positions()
+    def test_circuit_opens_after_repeated_failures_and_blocks_further_calls(self) -> None:
+        client = _AlwaysBadRequestClient()
+        transport, _ = make_transport(client)
 
-    def test_real_execute_request_wraps_malformed_url_as_transport_error(self) -> None:
-        # Exercises the *real* urllib-backed _execute_request (not
-        # monkeypatched) against a deliberately empty base_url. This is
-        # network-safe: urllib rejects a schemeless URL while building the
-        # Request object, before any socket/DNS work happens, so this
-        # raises synchronously with zero network I/O.
-        transport = make_transport(base_url="")
+        for _ in range(5):  # default CircuitBreaker.failure_threshold
+            with self.assertRaises(GrowwApiError):
+                transport.list_positions()
 
-        with self.assertRaises(GrowwTransportError):
+        with self.assertRaises(GrowwTransportError) as ctx:
             transport.list_positions()
+
+        self.assertIn("circuit open", str(ctx.exception).lower())
+        # the 6th call was blocked by the breaker, not forwarded to the client
+        self.assertEqual(len(client.calls), 5)
+
+    def test_write_calls_never_retry(self) -> None:
+        client = FakeGrowwClient()
+        client.responses["place_order"] = RuntimeError("timeout")
+        transport, _ = make_transport(client)
+
+        with self.assertRaises(GrowwTransportError):
+            transport.place_order({"trading_symbol": "RELIANCE"})
+
+        self.assertEqual(len(client.calls), 1)  # no retry attempts for a write
 
 
 if __name__ == "__main__":

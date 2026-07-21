@@ -2,18 +2,24 @@
 Unit tests for core.market_data.groww_live_feed and
 core.market_data.groww_transport.
 
-These tests never touch a real socket: for the feed, a fake transport
-double returns canned quote dicts; for the transport itself,
-``GrowwMarketDataTransport._execute_request`` (the sole raw-HTTP seam) is
-substituted directly.
+These tests never touch a real socket or the real Groww API. Transport
+tests inject a fake client shaped like growwapi.GrowwAPI directly,
+bypassing authentication (which - unlike the old raw-HTTP transport -
+now happens for real, at construction, via a real GrowwAPI call, unless
+a client is injected). Feed tests use a fake GrowwMarketDataTransport
+double that returns canned (verified-shape) quote dicts per symbol.
 
 Run with:
     PYTHONPATH=. python -m unittest tests/unit/test_live_market_data_feed.py -v
 """
 from __future__ import annotations
 
-import json
 import unittest
+from datetime import UTC, datetime
+from unittest.mock import patch
+
+from growwapi import GrowwAPI
+from growwapi.groww.exceptions import GrowwAPIAuthenticationException, GrowwAPIBadRequestException
 
 from core.market_data.errors import (
     MarketDataAuthenticationError,
@@ -29,87 +35,92 @@ from core.market_data.groww_transport import (
 )
 
 
-def make_transport(base_url: str = "https://api.groww.example") -> GrowwMarketDataTransport:
+class FakeGrowwClient:
+    """Test double matching the subset of growwapi.GrowwAPI's interface this transport uses."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict]] = []
+        self.response: object = None
+
+    def get_quote(self, **kwargs):
+        self.calls.append(("get_quote", kwargs))
+        if isinstance(self.response, Exception):
+            raise self.response
+        return self.response
+
+
+def make_transport(client: FakeGrowwClient | None = None) -> tuple[GrowwMarketDataTransport, FakeGrowwClient]:
+    client = client or FakeGrowwClient()
     config = GrowwMarketDataTransportConfig(
-        base_url=base_url,
-        credentials=GrowwMarketDataCredentials(api_key="test-key", access_token="test-token"),
+        credentials=GrowwMarketDataCredentials(api_key="test-key", secret="test-secret"),
         timeout_seconds=5.0,
     )
-    return GrowwMarketDataTransport(config)
+    return GrowwMarketDataTransport(config, client=client), client
+
+
+class GrowwMarketDataTransportAuthenticationTests(unittest.TestCase):
+    @patch("core.market_data.groww_transport.generate_totp", return_value="123456")
+    @patch.object(GrowwAPI, "get_access_token")
+    def test_constructs_authenticated_client_from_api_key_and_totp(
+        self, mock_get_token, mock_generate_totp
+    ) -> None:
+        mock_get_token.return_value = "real-token"
+
+        config = GrowwMarketDataTransportConfig(
+            credentials=GrowwMarketDataCredentials(api_key="k", secret="s")
+        )
+        transport = GrowwMarketDataTransport(config)
+
+        mock_generate_totp.assert_called_once_with("s")
+        mock_get_token.assert_called_once_with(api_key="k", totp="123456")
+        self.assertIsInstance(transport._client, GrowwAPI)
+
+    @patch("core.market_data.groww_transport.generate_totp", return_value="123456")
+    @patch.object(GrowwAPI, "get_access_token")
+    def test_authentication_failure_is_translated(self, mock_get_token, mock_generate_totp) -> None:
+        mock_get_token.side_effect = GrowwAPIAuthenticationException()
+
+        config = GrowwMarketDataTransportConfig(
+            credentials=GrowwMarketDataCredentials(api_key="k", secret="bad")
+        )
+
+        with self.assertRaises(MarketDataAuthenticationError):
+            GrowwMarketDataTransport(config)
 
 
 class GrowwMarketDataTransportTests(unittest.TestCase):
-    def test_builds_auth_headers_correctly(self) -> None:
-        transport = make_transport()
-
-        headers = transport._auth_headers()
-
-        self.assertEqual(headers["Authorization"], "Bearer test-token")
-        self.assertEqual(headers["X-API-KEY"], "test-key")
-
-    def test_get_quote_sends_expected_get_request_and_parses_response(self) -> None:
-        transport = make_transport()
-        captured = {}
-
-        def fake_execute(method, url, headers):
-            captured["method"] = method
-            captured["url"] = url
-            captured["headers"] = headers
-            return 200, json.dumps({"symbol": "RELIANCE", "close": 2500.0})
-
-        transport._execute_request = fake_execute  # type: ignore[method-assign]
+    def test_get_quote_forwards_expected_kwargs_and_returns_response(self) -> None:
+        transport, client = make_transport()
+        client.response = {"last_price": 2500.0}
 
         result = transport.get_quote("RELIANCE", "NSE")
 
-        self.assertEqual(result, {"symbol": "RELIANCE", "close": 2500.0})
-        self.assertEqual(captured["method"], "GET")
-        self.assertIn("symbol=RELIANCE", captured["url"])
-        self.assertIn("exchange=NSE", captured["url"])
-        self.assertEqual(captured["headers"]["Authorization"], "Bearer test-token")
+        self.assertEqual(result, {"last_price": 2500.0})
+        name, kwargs = client.calls[0]
+        self.assertEqual(name, "get_quote")
+        self.assertEqual(kwargs["trading_symbol"], "RELIANCE")
+        self.assertEqual(kwargs["exchange"], "NSE")
+        self.assertEqual(kwargs["segment"], GrowwAPI.SEGMENT_CASH)
 
-    def test_non_2xx_response_raises_provider_error(self) -> None:
-        transport = make_transport()
-        transport._execute_request = lambda method, url, headers: (  # type: ignore[method-assign]
-            500,
-            json.dumps({"error": "internal_error"}),
-        )
+    def test_growwapi_exception_raises_provider_error(self) -> None:
+        transport, client = make_transport()
+        client.response = GrowwAPIBadRequestException()
 
         with self.assertRaises(MarketDataProviderError) as ctx:
             transport.get_quote("RELIANCE", "NSE")
 
-        self.assertEqual(ctx.exception.status_code, 500)
+        self.assertEqual(ctx.exception.status_code, 400)
 
-    def test_401_response_raises_authentication_error(self) -> None:
-        transport = make_transport()
-        transport._execute_request = lambda method, url, headers: (401, "{}")  # type: ignore[method-assign]
+    def test_authentication_style_exception_raises_authentication_error(self) -> None:
+        transport, client = make_transport()
+        client.response = GrowwAPIAuthenticationException()
 
         with self.assertRaises(MarketDataAuthenticationError):
             transport.get_quote("RELIANCE", "NSE")
 
-    def test_connection_failure_raises_transport_error(self) -> None:
-        transport = make_transport()
-
-        def fake_execute(method, url, headers):
-            raise MarketDataTransportError("connection refused")
-
-        transport._execute_request = fake_execute  # type: ignore[method-assign]
-
-        with self.assertRaises(MarketDataTransportError):
-            transport.get_quote("RELIANCE", "NSE")
-
-    def test_invalid_json_raises_transport_error(self) -> None:
-        transport = make_transport()
-        transport._execute_request = lambda method, url, headers: (200, "not-json{{{")  # type: ignore[method-assign]
-
-        with self.assertRaises(MarketDataTransportError):
-            transport.get_quote("RELIANCE", "NSE")
-
-    def test_real_execute_request_wraps_malformed_url_as_transport_error(self) -> None:
-        # Exercises the real urllib-backed _execute_request (not
-        # monkeypatched) against a deliberately empty base_url. Network
-        # safe: urllib rejects a schemeless URL while building the
-        # Request object, before any socket/DNS work happens.
-        transport = make_transport(base_url="")
+    def test_unexpected_exception_raises_transport_error(self) -> None:
+        transport, client = make_transport()
+        client.response = RuntimeError("connection refused")
 
         with self.assertRaises(MarketDataTransportError):
             transport.get_quote("RELIANCE", "NSE")
@@ -133,21 +144,17 @@ class FakeMarketDataTransport:
         return queue.pop(0)
 
 
-def make_quote(
-    symbol: str = "RELIANCE",
-    exchange: str = "NSE",
-    timestamp: str = "2026-01-01T09:15:00",
-    close: float = 2500.0,
-) -> dict:
+def _epoch_millis(dt: datetime) -> int:
+    return int(dt.replace(tzinfo=UTC).timestamp() * 1000)
+
+
+def make_quote(timestamp: datetime = datetime(2026, 1, 1, 9, 15, 0), close: float = 2500.0) -> dict:
+    """Verified get_quote shape: https://groww.in/trade-api/docs/python-sdk/live-data"""
     return {
-        "symbol": symbol,
-        "exchange": exchange,
-        "timestamp": timestamp,
-        "open": close - 5,
-        "high": close + 5,
-        "low": close - 10,
-        "close": close,
+        "ohlc": {"open": close - 5, "high": close + 5, "low": close - 10, "close": close - 1},
+        "last_price": close,
         "volume": 1000.0,
+        "last_trade_time": _epoch_millis(timestamp),
     }
 
 
@@ -163,8 +170,8 @@ def make_feed(
 class GrowwLiveMarketDataFeedTests(unittest.TestCase):
     def test_only_subscribed_symbols_are_polled_and_emitted(self) -> None:
         transport = FakeMarketDataTransport()
-        transport.queue("RELIANCE", make_quote(symbol="RELIANCE"))
-        transport.queue("TCS", make_quote(symbol="TCS"))
+        transport.queue("RELIANCE", make_quote())
+        transport.queue("TCS", make_quote())
 
         feed = make_feed(transport)
         feed.subscribe("RELIANCE")
@@ -181,14 +188,10 @@ class GrowwLiveMarketDataFeedTests(unittest.TestCase):
         transport.queue(
             "RELIANCE",
             {
-                "symbol": "RELIANCE",
-                "exchange": "NSE",
-                "timestamp": "2026-01-01T09:16:00",
-                "open": 2490.0,
-                "high": 2510.0,
-                "low": 2485.0,
-                "close": 2501.0,
+                "ohlc": {"open": 2490.0, "high": 2510.0, "low": 2485.0, "close": 2495.0},
+                "last_price": 2501.0,
                 "volume": 150000.0,
+                "last_trade_time": _epoch_millis(datetime(2026, 1, 1, 9, 16, 0)),
             },
         )
         feed = make_feed(transport)
@@ -203,13 +206,14 @@ class GrowwLiveMarketDataFeedTests(unittest.TestCase):
         self.assertEqual(bar.open, 2490.0)
         self.assertEqual(bar.high, 2510.0)
         self.assertEqual(bar.low, 2485.0)
+        # close comes from last_price, not ohlc.close - see _parse_bar's docstring.
         self.assertEqual(bar.close, 2501.0)
         self.assertEqual(bar.volume, 150000.0)
-        self.assertEqual(bar.timestamp.isoformat(), "2026-01-01T09:16:00")
+        self.assertEqual(bar.timestamp, datetime(2026, 1, 1, 9, 16, 0))
 
     def test_malformed_response_raises_explicit_error(self) -> None:
         transport = FakeMarketDataTransport()
-        transport.queue("RELIANCE", {"symbol": "RELIANCE", "close": 2500.0})  # missing timestamp/open/etc.
+        transport.queue("RELIANCE", {"last_price": 2500.0})  # missing ohlc/volume/last_trade_time
 
         feed = make_feed(transport)
         feed.subscribe("RELIANCE")
@@ -229,7 +233,7 @@ class GrowwLiveMarketDataFeedTests(unittest.TestCase):
 
     def test_repeated_unchanged_timestamp_is_deduped_across_polls(self) -> None:
         transport = FakeMarketDataTransport()
-        same_quote = make_quote(timestamp="2026-01-01T09:15:00")
+        same_quote = make_quote(timestamp=datetime(2026, 1, 1, 9, 15, 0))
         transport.queue("RELIANCE", same_quote, dict(same_quote))  # same timestamp twice
 
         feed = make_feed(transport, max_polls=2)
@@ -245,8 +249,8 @@ class GrowwLiveMarketDataFeedTests(unittest.TestCase):
         transport = FakeMarketDataTransport()
         transport.queue(
             "RELIANCE",
-            make_quote(timestamp="2026-01-01T09:15:00", close=2490.0),
-            make_quote(timestamp="2026-01-01T09:16:00", close=2501.0),
+            make_quote(timestamp=datetime(2026, 1, 1, 9, 15, 0), close=2490.0),
+            make_quote(timestamp=datetime(2026, 1, 1, 9, 16, 0), close=2501.0),
         )
 
         feed = make_feed(transport, max_polls=2)
@@ -261,8 +265,8 @@ class GrowwLiveMarketDataFeedTests(unittest.TestCase):
         transport = FakeMarketDataTransport()
         transport.queue(
             "RELIANCE",
-            make_quote(timestamp="2026-01-01T09:15:00", close=2490.0),
-            make_quote(timestamp="2026-01-01T09:16:00", close=2501.0),
+            make_quote(timestamp=datetime(2026, 1, 1, 9, 15, 0), close=2490.0),
+            make_quote(timestamp=datetime(2026, 1, 1, 9, 16, 0), close=2501.0),
         )
 
         feed = make_feed(transport, max_polls=2)
@@ -278,9 +282,9 @@ class GrowwLiveMarketDataFeedTests(unittest.TestCase):
 
     def test_stream_is_deterministic_across_repeated_symbols_order(self) -> None:
         transport = FakeMarketDataTransport()
-        transport.queue("AAA", make_quote(symbol="AAA"))
-        transport.queue("ZZZ", make_quote(symbol="ZZZ"))
-        transport.queue("MMM", make_quote(symbol="MMM"))
+        transport.queue("AAA", make_quote())
+        transport.queue("ZZZ", make_quote())
+        transport.queue("MMM", make_quote())
 
         feed = make_feed(transport)
         feed.subscribe("ZZZ")
@@ -296,9 +300,9 @@ class GrowwLiveMarketDataFeedTests(unittest.TestCase):
         transport = FakeMarketDataTransport()
         transport.queue(
             "RELIANCE",
-            make_quote(timestamp="2026-01-01T09:15:00"),
-            make_quote(timestamp="2026-01-01T09:16:00"),
-            make_quote(timestamp="2026-01-01T09:17:00"),
+            make_quote(timestamp=datetime(2026, 1, 1, 9, 15, 0)),
+            make_quote(timestamp=datetime(2026, 1, 1, 9, 16, 0)),
+            make_quote(timestamp=datetime(2026, 1, 1, 9, 17, 0)),
         )
 
         feed = make_feed(transport, max_polls=3)
@@ -313,8 +317,8 @@ class GrowwLiveMarketDataFeedTests(unittest.TestCase):
         transport = FakeMarketDataTransport()
         transport.queue(
             "RELIANCE",
-            make_quote(timestamp="2026-01-01T09:15:00"),
-            make_quote(timestamp="2026-01-01T09:16:00"),
+            make_quote(timestamp=datetime(2026, 1, 1, 9, 15, 0)),
+            make_quote(timestamp=datetime(2026, 1, 1, 9, 16, 0)),
         )
         sleep_calls = []
 
@@ -327,7 +331,7 @@ class GrowwLiveMarketDataFeedTests(unittest.TestCase):
 
     def test_unsubscribe_stops_symbol_from_being_polled(self) -> None:
         transport = FakeMarketDataTransport()
-        transport.queue("RELIANCE", make_quote(symbol="RELIANCE"))
+        transport.queue("RELIANCE", make_quote())
 
         feed = make_feed(transport)
         feed.subscribe("RELIANCE")

@@ -6,13 +6,16 @@ Implements the same ``MarketDataFeed`` contract as ``CSVMarketDataFeed``/
 ``ExecutionOrchestrator`` can use it without any code change - they never
 know bars came from Groww rather than a file or memory.
 
-V1 is poll-based, not websocket-based: no verified Groww streaming API
-shape is available to build against (no network access, no real
-credentials, no docs consulted as part of this task), while a polling
-loop against a single documented "get quote" style endpoint is simple,
-deterministic, and testable. If a real Groww streaming API is confirmed
-later, that would replace ``_poll_symbol``'s call to the transport with a
-websocket subscription - it would not require changing this class's
+V1 is poll-based, not streaming: ``growwapi`` does expose a live feed
+(``GrowwFeed``, over a websocket/NATS transport - see the SDK's
+``feed.py``), but that is a materially different integration (a
+persistent connection + callback model, not a request/response call)
+that this task did not build. A polling loop against ``get_quote`` (see
+``groww_transport.py``, request/response shape verified against
+https://groww.in/trade-api/docs/python-sdk/live-data) is simple,
+deterministic, and testable in the meantime. Switching to ``GrowwFeed``
+later would replace ``_poll_symbol``'s call to the transport with a
+subscription callback - it would not require changing this class's
 public shape, since ``MarketDataFeed`` already only asks for an
 ``Iterator[MarketBar]``.
 """
@@ -22,7 +25,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 
 from core.market_data.base import MarketDataFeed
 from core.market_data.errors import MarketDataTransportError, UnsupportedSymbolError
@@ -133,12 +136,24 @@ class GrowwLiveMarketDataFeed(MarketDataFeed):
 
     def _parse_bar(self, symbol: str, data: dict) -> MarketBar:
         """
-        Parse one Groww quote payload into a ``MarketBar``.
+        Parse one Groww ``get_quote`` payload into a ``MarketBar``.
 
-        Assumed shape (see module docstring): ``{"symbol", "exchange",
-        "timestamp" (ISO-8601 string), "open", "high", "low", "close",
-        "volume"}`` on success, or ``{"error": "..."}`` if Groww does not
-        recognize the requested symbol.
+        Verified shape (https://groww.in/trade-api/docs/python-sdk/live-data):
+        ``{"ohlc": {"open", "high", "low", "close"}, "last_price",
+        "volume", "last_trade_time" (epoch milliseconds), ...}`` - or
+        ``{"error": "..."}`` if Groww does not recognize the requested
+        symbol (kept from the prior assumed shape; not contradicted by
+        the verified docs, which don't document the error case).
+
+        ``close`` is taken from ``last_price``, not ``ohlc.close``:
+        ``ohlc.close`` most likely means the previous session's close
+        (standard quote-block convention), which would be actively wrong
+        to feed a live strategy as "the current bar's close" - the whole
+        point of polling a live quote is the *current* traded price.
+        ``symbol``/``exchange`` are not present in the verified example
+        response (unsurprising - they were already given as request
+        params), so this always uses the values this feed was called
+        with, never a response field.
         """
         if "error" in data:
             raise UnsupportedSymbolError(
@@ -146,14 +161,15 @@ class GrowwLiveMarketDataFeed(MarketDataFeed):
             )
 
         try:
+            ohlc = data["ohlc"]
             return MarketBar(
-                symbol=data.get("symbol", symbol),
-                exchange=data.get("exchange", self._exchange),
-                timestamp=self._parse_timestamp(data["timestamp"]),
-                open=float(data["open"]),
-                high=float(data["high"]),
-                low=float(data["low"]),
-                close=float(data["close"]),
+                symbol=symbol,
+                exchange=self._exchange,
+                timestamp=self._parse_epoch_millis(data["last_trade_time"]),
+                open=float(ohlc["open"]),
+                high=float(ohlc["high"]),
+                low=float(ohlc["low"]),
+                close=float(data["last_price"]),
                 volume=float(data["volume"]),
             )
         except KeyError as exc:
@@ -162,13 +178,12 @@ class GrowwLiveMarketDataFeed(MarketDataFeed):
             ) from exc
 
     @staticmethod
-    def _parse_timestamp(value: str) -> datetime:
+    def _parse_epoch_millis(value: int) -> datetime:
         """
-        Parse an assumed ISO-8601 timestamp string into a naive
+        Parse Groww's epoch-milliseconds ``last_trade_time`` into a naive
         ``datetime``, matching the naive-datetime convention every other
         ``MarketBar`` source in this codebase already uses (e.g.
         ``CSVMarketDataFeed``'s ``strptime`` parsing) - so bars from any
         feed compare/sort consistently within a session.
         """
-        parsed = datetime.fromisoformat(value)
-        return parsed.replace(tzinfo=None) if parsed.tzinfo is not None else parsed
+        return datetime.fromtimestamp(int(value) / 1000, tz=UTC).replace(tzinfo=None)
