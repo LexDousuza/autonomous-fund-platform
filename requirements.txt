@@ -1,0 +1,4 @@
+PyYAML==6.0.3
+growwapi==1.5.0
+kiteconnect==5.2.0
+boto3==1.43.52  # optional: only used by apps/live_trader/aws_secrets.py

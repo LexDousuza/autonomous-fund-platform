@@ -14,4 +14,9 @@ __pycache__/
 
 # Runtime session artifacts (audit logs written per live-trader/kill-switch run)
 data/live_sessions/
+data/alerts.log
+data/cron_logs/
+
+# Real credentials for unattended cron runs - see .env.live_trader.example
+.env.live_trader
 

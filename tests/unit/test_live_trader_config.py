@@ -82,6 +82,52 @@ class LoadLiveTraderConfigFromEnvTests(unittest.TestCase):
         self.assertTrue(config.requires_live_confirmation)
         self.assertTrue(config.live_confirmed)
 
+    def test_paper_broker_with_kite_data_is_allowed(self) -> None:
+        os.environ["LIVE_MARKET_DATA_PROVIDER"] = "kite"
+
+        config = load_live_trader_config_from_env()
+
+        self.assertEqual(config.broker_provider, "paper")
+        self.assertEqual(config.broker_mode, "paper")
+        self.assertEqual(config.market_data_provider, "kite")
+        self.assertTrue(config.requires_kite_credentials)
+        self.assertFalse(config.requires_live_confirmation)  # paper broker: no confirmation needed
+
+    def test_kite_broker_with_kite_data_and_confirmation_is_allowed(self) -> None:
+        os.environ["LIVE_BROKER_PROVIDER"] = "kite"
+        os.environ["LIVE_MARKET_DATA_PROVIDER"] = "kite"
+        os.environ["LIVE_CONFIRM"] = LIVE_CONFIRM_REQUIRED_VALUE
+
+        config = load_live_trader_config_from_env()
+
+        self.assertEqual(config.broker_provider, "kite")
+        self.assertEqual(config.broker_mode, "live")
+        self.assertEqual(config.market_data_provider, "kite")
+        self.assertTrue(config.requires_kite_credentials)
+        self.assertTrue(config.requires_live_confirmation)
+        self.assertTrue(config.live_confirmed)
+
+    def test_kite_broker_with_groww_data_and_confirmation_is_allowed(self) -> None:
+        """
+        The cost-motivated split: real order execution via Kite's free
+        Personal tier, real quotes from Groww instead of Kite's paid
+        Connect tier - a genuinely mixed-provider combination, unlike
+        groww+groww/kite+kite.
+        """
+        os.environ["LIVE_BROKER_PROVIDER"] = "kite"
+        os.environ["LIVE_MARKET_DATA_PROVIDER"] = "groww"
+        os.environ["LIVE_CONFIRM"] = LIVE_CONFIRM_REQUIRED_VALUE
+
+        config = load_live_trader_config_from_env()
+
+        self.assertEqual(config.broker_provider, "kite")
+        self.assertEqual(config.broker_mode, "live")
+        self.assertEqual(config.market_data_provider, "groww")
+        self.assertTrue(config.requires_kite_credentials)
+        self.assertTrue(config.requires_groww_credentials)
+        self.assertTrue(config.requires_live_confirmation)
+        self.assertTrue(config.live_confirmed)
+
     # -- the hard safety gate -------------------------------------------------
 
     def test_groww_live_broker_without_confirmation_raises(self) -> None:
@@ -132,6 +178,16 @@ class LoadLiveTraderConfigFromEnvTests(unittest.TestCase):
         # Real broker against fake demo bars is not a supported safety
         # mode - it's dangerous (real orders driven by synthetic data).
         os.environ["LIVE_BROKER_PROVIDER"] = "groww"
+        os.environ["LIVE_MARKET_DATA_PROVIDER"] = "memory"
+        os.environ["LIVE_CONFIRM"] = LIVE_CONFIRM_REQUIRED_VALUE
+
+        with self.assertRaises(ValueError) as ctx:
+            load_live_trader_config_from_env()
+
+        self.assertIn("combination", str(ctx.exception))
+
+    def test_kite_broker_with_memory_data_is_rejected_as_invalid_combination(self) -> None:
+        os.environ["LIVE_BROKER_PROVIDER"] = "kite"
         os.environ["LIVE_MARKET_DATA_PROVIDER"] = "memory"
         os.environ["LIVE_CONFIRM"] = LIVE_CONFIRM_REQUIRED_VALUE
 
