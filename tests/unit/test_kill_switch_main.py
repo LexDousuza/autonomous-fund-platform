@@ -21,6 +21,7 @@ from apps.live_trader.config import MissingGrowwCredentialsError
 from apps.live_trader.kill_switch_main import main, parse_args, run_kill_switch
 from core.audit.models import AuditEvent, AuditEventType, SessionMetadata, SessionSummary
 from core.audit.sink import AuditSink
+from core.notifications.alert_sink import NullAlertSink
 from core.broker.base import OrderRequest, OrderSide, OrderType, ProductType
 from core.broker.paper import PaperBroker
 
@@ -90,7 +91,7 @@ class RunKillSwitchConfirmedTests(unittest.TestCase):
         with patch("apps.live_trader.kill_switch_main.build_broker", return_value=broker):
             buffer = io.StringIO()
             with redirect_stdout(buffer):
-                result = run_kill_switch("paper", confirmed=True, audit_sink=sink)
+                result = run_kill_switch("paper", confirmed=True, audit_sink=sink, alert_sink=NullAlertSink())
 
         self.assertIsNotNone(result)
         self.assertTrue(result.succeeded)
@@ -111,7 +112,7 @@ class RunKillSwitchConfirmedTests(unittest.TestCase):
 
         with patch("apps.live_trader.kill_switch_main.build_broker", return_value=broker):
             with redirect_stdout(io.StringIO()):
-                result = run_kill_switch("paper", confirmed=True, audit_sink=sink)
+                result = run_kill_switch("paper", confirmed=True, audit_sink=sink, alert_sink=NullAlertSink())
 
         self.assertTrue(result.succeeded)
         self.assertEqual(result.flattened_positions, [])

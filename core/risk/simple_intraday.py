@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from core.broker.base import OrderRequest
+from core.broker.groww_fees import estimate_groww_brokerage
 from core.risk.base import RiskContext, RiskDecision, RiskManager
 
 
@@ -10,6 +11,7 @@ from core.risk.base import RiskContext, RiskDecision, RiskManager
 class IntradayRiskSettings:
     max_capital_per_trade_pct_of_intraday_bucket: float = 0.25
     max_open_positions: int = 3
+    min_profit_to_brokerage_ratio: float = 2.0
 
 
 class SimpleIntradayRiskManager(RiskManager):
@@ -19,8 +21,11 @@ class SimpleIntradayRiskManager(RiskManager):
     Current checks:
     1. max daily loss not breached
     2. max trades per day not exceeded
-    3. enough available intraday capital for the proposed order
-    4. single-trade capital not above allowed per-trade limit
+    3. price is present (required for the checks below)
+    4. projected profit clears Groww's brokerage cost by the configured
+       margin - skipped when ``context.target_pct`` is unset
+    5. enough available intraday capital for the proposed order
+    6. single-trade capital not above allowed per-trade limit
     """
 
     def __init__(self, settings: IntradayRiskSettings | None = None) -> None:
@@ -60,11 +65,29 @@ class SimpleIntradayRiskManager(RiskManager):
             )
 
         proposed_notional = order_request.price * order_request.quantity
+
+        # 4) is the projected profit worth Groww's brokerage cost?
+        if context.target_pct is not None:
+            projected_profit = proposed_notional * (context.target_pct / 100)
+            brokerage_cost = estimate_groww_brokerage(proposed_notional)
+            min_required_profit = self.settings.min_profit_to_brokerage_ratio * brokerage_cost
+
+            if projected_profit <= min_required_profit:
+                return RiskDecision(
+                    approved=False,
+                    reason="projected_profit_below_brokerage_threshold",
+                    metadata={
+                        "projected_profit": projected_profit,
+                        "brokerage_cost": brokerage_cost,
+                        "min_required_profit": min_required_profit,
+                    },
+                )
+
         available_intraday_capital = (
             context.available_intraday_capital - context.used_intraday_capital
         )
 
-        # 4) enough capital left?
+        # 5) enough capital left?
         if proposed_notional > available_intraday_capital:
             return RiskDecision(
                 approved=False,
@@ -75,7 +98,7 @@ class SimpleIntradayRiskManager(RiskManager):
                 },
             )
 
-        # 5) per-trade capital cap
+        # 6) per-trade capital cap
         max_per_trade = (
             context.available_intraday_capital
             * self.settings.max_capital_per_trade_pct_of_intraday_bucket

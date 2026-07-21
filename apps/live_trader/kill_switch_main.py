@@ -42,6 +42,7 @@ from core.broker.base import Broker, Position
 from core.broker.factory import build_broker
 from core.broker.factory_models import BrokerConfig
 from core.execution.kill_switch import KillSwitchResult, flatten_all
+from core.notifications.alert_sink import AlertSink, ConsoleAlertSink
 
 _SUPPORTED_BROKER_PROVIDERS = {"paper", "groww"}
 
@@ -71,8 +72,7 @@ def _build_broker(provider: str) -> Broker:
                 mode="live",
                 metadata={
                     "api_key": credentials.api_key,
-                    "access_token": credentials.access_token,
-                    "base_url": credentials.base_url,
+                    "secret": credentials.secret,
                 },
             )
         )
@@ -154,13 +154,17 @@ def run_kill_switch(
     confirmed: bool,
     open_order_ids: list[str] | None = None,
     audit_sink: AuditSink | None = None,
+    alert_sink: AlertSink | None = None,
 ) -> KillSwitchResult | None:
     """
     Build a broker standalone and either preview or actually flatten its
     positions.
 
     Returns ``None`` for a preview-only run (``confirmed=False``, nothing
-    was touched); otherwise the real ``KillSwitchResult``.
+    was touched); otherwise the real ``KillSwitchResult``. A confirmed run
+    always alerts once it's done - the kill switch only fires when
+    something already needed emergency attention, so the outcome (clean
+    or "needs manual follow-up") is always worth a human seeing right away.
     """
     broker = _build_broker(broker_provider)
     _print_positions(broker.list_positions())
@@ -172,6 +176,7 @@ def run_kill_switch(
         return None
 
     sink = audit_sink if audit_sink is not None else FileAuditSink()
+    alerts = alert_sink if alert_sink is not None else ConsoleAlertSink()
     sink.start_session(
         SessionMetadata(
             session_id=_generate_session_id(),
@@ -189,6 +194,13 @@ def run_kill_switch(
     )
     _print_result(result)
     sink.finalize_session(_build_kill_switch_summary(result))
+    alerts.send(
+        f"kill switch ran against '{broker_provider}': flattened "
+        f"{len(result.flattened_positions)} position(s), cancelled "
+        f"{len(result.cancelled_order_ids)} order(s). "
+        f"{'Succeeded.' if result.succeeded else 'NEEDS MANUAL FOLLOW-UP - see output above.'}",
+        severity="warning" if result.succeeded else "critical",
+    )
     return result
 
 

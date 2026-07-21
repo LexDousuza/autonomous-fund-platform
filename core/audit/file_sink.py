@@ -160,3 +160,40 @@ class FileAuditSink(AuditSink):
 
     def _read_session_file(self) -> dict:
         return json.loads(self._session_file_path().read_text(encoding="utf-8"))
+
+
+def find_unclean_prior_session(base_dir: str | Path = DEFAULT_BASE_DIR) -> str | None:
+    """
+    Return the session id of the most recent previous session if it
+    never reached a terminal status ("completed"/"failed").
+
+    A handled exception already gets an accurate "failed" status via
+    ``record_failure`` above - this catches the other case: the process
+    itself died (killed, OOM, power loss) before it ever got a chance to
+    run its own exception handling, leaving ``status`` stuck at
+    ``"running"`` forever. That's a distinct, complementary signal to
+    ``core/execution/reconciliation.py``'s broker-position check: a
+    session can crash cleanly-positioned (flat book, so reconciliation
+    alone wouldn't catch it) and still be a crash worth a human looking
+    at before the next session assumes a clean slate.
+    """
+    base = Path(base_dir)
+    if not base.exists():
+        return None
+    session_dirs = sorted((d for d in base.iterdir() if d.is_dir()), key=lambda p: p.name)
+    if not session_dirs:
+        return None
+
+    latest = session_dirs[-1]
+    session_file = latest / _SESSION_FILE_NAME
+    if not session_file.exists():
+        return None
+
+    try:
+        data = json.loads(session_file.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return latest.name  # an unreadable session file is itself a red flag
+
+    if data.get("status") == "running":
+        return latest.name
+    return None

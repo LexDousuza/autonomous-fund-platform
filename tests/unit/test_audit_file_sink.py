@@ -14,7 +14,7 @@ import unittest
 from datetime import UTC, date, datetime
 from pathlib import Path
 
-from core.audit.file_sink import FileAuditSink
+from core.audit.file_sink import FileAuditSink, find_unclean_prior_session
 from core.audit.models import AuditEvent, AuditEventType, SessionMetadata, SessionSummary
 from core.broker.base import Order, OrderSide, OrderStatus, OrderType, ProductType
 from core.broker.groww_errors import GrowwTransportError
@@ -246,6 +246,50 @@ class FileAuditSinkTests(unittest.TestCase):
 
         self.assertEqual(len(self._read_events("session-k1")), 2)  # started + signal
         self.assertEqual(len(self._read_events("session-k2")), 1)  # started only
+
+
+class FindUncleanPriorSessionTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp_dir = Path(tempfile.mkdtemp(prefix="audit_test_"))
+        self.addCleanup(shutil.rmtree, self.tmp_dir, ignore_errors=True)
+
+    def test_no_base_dir_returns_none(self) -> None:
+        missing = self.tmp_dir / "does_not_exist"
+        self.assertIsNone(find_unclean_prior_session(base_dir=missing))
+
+    def test_no_prior_sessions_returns_none(self) -> None:
+        self.assertIsNone(find_unclean_prior_session(base_dir=self.tmp_dir))
+
+    def test_cleanly_completed_session_returns_none(self) -> None:
+        sink = FileAuditSink(base_dir=self.tmp_dir)
+        sink.start_session(make_metadata("session-clean"))
+        sink.finalize_session(make_summary(succeeded=True))
+
+        self.assertIsNone(find_unclean_prior_session(base_dir=self.tmp_dir))
+
+    def test_cleanly_failed_session_returns_none(self) -> None:
+        sink = FileAuditSink(base_dir=self.tmp_dir)
+        sink.start_session(make_metadata("session-failed"))
+        sink.record_failure(RuntimeError("handled failure"))
+
+        self.assertIsNone(find_unclean_prior_session(base_dir=self.tmp_dir))
+
+    def test_session_stuck_running_is_flagged(self) -> None:
+        sink = FileAuditSink(base_dir=self.tmp_dir)
+        sink.start_session(make_metadata("session-crashed"))
+        # process "dies" here - never calls finalize_session/record_failure
+
+        self.assertEqual(find_unclean_prior_session(base_dir=self.tmp_dir), "session-crashed")
+
+    def test_only_the_most_recent_session_is_checked(self) -> None:
+        sink1 = FileAuditSink(base_dir=self.tmp_dir)
+        sink1.start_session(make_metadata("session-a-crashed"))  # older, crashed
+
+        sink2 = FileAuditSink(base_dir=self.tmp_dir)
+        sink2.start_session(make_metadata("session-b-clean"))
+        sink2.finalize_session(make_summary(succeeded=True))  # newer, clean
+
+        self.assertIsNone(find_unclean_prior_session(base_dir=self.tmp_dir))
 
 
 if __name__ == "__main__":

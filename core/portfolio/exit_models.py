@@ -5,6 +5,17 @@ from datetime import datetime, time
 from typing import Any
 
 
+def parse_time_of_day(value: str) -> time:
+    """
+    Parse an ``"HH:MM"`` (24-hour) string - the format
+    ``DailyRiskLimits.force_square_off_at``/``stop_new_entries_after`` are
+    authored in (see ``config/mandates/sample_mandate.yaml``) - into a
+    ``time``. Raises ``ValueError`` for a malformed value, so a typo'd
+    mandate fails loudly rather than silently never squaring off.
+    """
+    return datetime.strptime(value, "%H:%M").time()
+
+
 @dataclass(slots=True)
 class ExitPolicyConfig:
     """

@@ -22,6 +22,7 @@ class RiskContext:
     trades_taken_today: int
     max_daily_loss: float | None = None
     max_trades_per_day: int | None = None
+    target_pct: float | None = None
 
 
 class RiskManager(ABC):

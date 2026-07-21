@@ -10,10 +10,22 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, time
 
-from core.portfolio.exit_models import ExitPolicyConfig, PositionSnapshot
+from core.portfolio.exit_models import ExitPolicyConfig, PositionSnapshot, parse_time_of_day
 from core.portfolio.exits import ExitPolicyEvaluator
 from core.portfolio.position_manager import PositionManager
 from core.strategy.base import MarketBar
+
+
+class ParseTimeOfDayTests(unittest.TestCase):
+    def test_parses_hh_mm_string(self) -> None:
+        self.assertEqual(parse_time_of_day("15:20"), time(15, 20))
+
+    def test_parses_single_digit_hour(self) -> None:
+        self.assertEqual(parse_time_of_day("9:15"), time(9, 15))
+
+    def test_malformed_value_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            parse_time_of_day("not-a-time")
 
 
 def make_snapshot(
