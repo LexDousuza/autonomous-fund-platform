@@ -1,0 +1,14 @@
+strategy:
+  name: news_sentiment_signal
+
+# NOTE: `news_feed` is not set here - it isn't a YAML-serializable
+# primitive (see core/strategy/news_sentiment_signal.py's docstring).
+# Whatever builds this strategy's StrategyContext must inject a
+# core.news.google_news_feed.GoogleNewsFeed (or a test double with the
+# same .fetch() signature) into params["news_feed"] itself; if omitted,
+# the strategy falls back to constructing a real GoogleNewsFeed().
+params:
+  refresh_interval_bars: 12
+  buy_score_threshold: 2
+  max_headlines: 10
+  query_template: "{symbol} NSE share price"
