@@ -6,9 +6,15 @@ Run with:
 """
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
 
-from core.market_data.universe_loader import load_instrument_universe
+from core.market_data.universe_loader import (
+    add_instrument_to_universe,
+    load_instrument_universe,
+    write_instrument_universe,
+)
 from core.market_data.universe_models import Instrument, InstrumentUniverse
 from core.market_data.universe_selector import (
     TradingUniverseSelector,
@@ -67,6 +73,78 @@ class InstrumentUniverseLoaderTests(unittest.TestCase):
             ],
         )
         self.assertEqual(universe.instruments[0].metadata, {"lot_size": 1})
+
+
+class AddInstrumentToUniverseTests(unittest.TestCase):
+    def setUp(self) -> None:
+        tmp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp_dir.cleanup)
+        self.path = Path(tmp_dir.name) / "universe.yaml"
+        self.path.write_text(
+            "universe_name: test\ninstruments:\n"
+            "  - symbol: AAA\n    exchange: NSE\n    segment: CASH\n    enabled: true\n"
+        )
+
+    def test_appends_new_instrument(self) -> None:
+        universe = add_instrument_to_universe(self.path, "wipro", "nse", "CASH")
+
+        self.assertEqual([i.symbol for i in universe.instruments], ["AAA", "WIPRO"])
+        self.assertEqual(universe.instruments[-1].exchange, "NSE")
+        self.assertTrue(universe.instruments[-1].enabled)
+
+    def test_persists_to_disk(self) -> None:
+        add_instrument_to_universe(self.path, "WIPRO", "NSE")
+
+        reloaded = load_instrument_universe(self.path)
+        self.assertEqual([i.symbol for i in reloaded.instruments], ["AAA", "WIPRO"])
+
+    def test_duplicate_symbol_exchange_is_a_no_op(self) -> None:
+        add_instrument_to_universe(self.path, "AAA", "NSE")
+        universe = add_instrument_to_universe(self.path, "AAA", "NSE")
+
+        self.assertEqual(len(universe.instruments), 1)
+
+
+class WriteInstrumentUniverseTests(unittest.TestCase):
+    def setUp(self) -> None:
+        tmp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp_dir.cleanup)
+        self.path = Path(tmp_dir.name) / "universe.yaml"
+
+    def test_round_trips_through_load(self) -> None:
+        universe = InstrumentUniverse(
+            universe_name="screened_v1",
+            instruments=[
+                Instrument(symbol="AAA", exchange="NSE", segment="CASH", enabled=True),
+                Instrument(symbol="BBB", exchange="NSE", segment="CASH", enabled=False, tags=["it"]),
+            ],
+        )
+
+        write_instrument_universe(self.path, universe)
+        reloaded = load_instrument_universe(self.path)
+
+        self.assertEqual(reloaded.universe_name, "screened_v1")
+        self.assertEqual([i.symbol for i in reloaded.instruments], ["AAA", "BBB"])
+        self.assertFalse(reloaded.instruments[1].enabled)
+        self.assertEqual(reloaded.instruments[1].tags, ["it"])
+
+    def test_overwrites_an_existing_file_entirely(self) -> None:
+        self.path.write_text(
+            "universe_name: old\ninstruments:\n"
+            "  - symbol: ZZZ\n    exchange: NSE\n    segment: CASH\n    enabled: true\n"
+        )
+
+        write_instrument_universe(
+            self.path,
+            InstrumentUniverse(
+                universe_name="new",
+                instruments=[Instrument(symbol="AAA", exchange="NSE", segment="CASH")],
+            ),
+        )
+        reloaded = load_instrument_universe(self.path)
+
+        self.assertEqual(reloaded.universe_name, "new")
+        self.assertEqual([i.symbol for i in reloaded.instruments], ["AAA"])
 
 
 class TradingUniverseSelectorTests(unittest.TestCase):
