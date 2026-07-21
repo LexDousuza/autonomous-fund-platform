@@ -34,6 +34,14 @@ class OrderStatus(str, Enum):
 
 @dataclass(slots=True)
 class OrderRequest:
+    """
+    ``client_order_id`` is an optional caller-supplied idempotency key
+    for this specific order intent (see ``core/execution/idempotency.py``).
+    Callers that don't set it get today's behavior unchanged -
+    ``PaperBroker`` always creates a new fill, and ``GrowwBrokerAdapter``
+    lets Groww generate its own reference id.
+    """
+
     symbol: str
     exchange: str
     side: OrderSide
@@ -44,6 +52,7 @@ class OrderRequest:
     trigger_price: float | None = None
     strategy_name: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    client_order_id: str | None = None
 
 
 @dataclass(slots=True)

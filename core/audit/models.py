@@ -47,6 +47,7 @@ class AuditEventType(str, Enum):
     ORDER_SUBMITTED = "order_submitted"
     ORDER_PLACED = "order_placed"
     ORDER_REJECTED = "order_rejected"
+    DUPLICATE_ORDER_BLOCKED = "duplicate_order_blocked"
 
     # Exit flow
     EXIT_TRIGGERED = "exit_triggered"
@@ -54,6 +55,10 @@ class AuditEventType(str, Enum):
 
     # Session risk / guardrails
     SESSION_ENTRY_BLOCKED = "session_entry_blocked"
+
+    # Broker/local state reconciliation
+    RECONCILIATION_CHECKED = "reconciliation_checked"
+    RECONCILIATION_MISMATCH = "reconciliation_mismatch"
 
     # Kill switch / emergency flatten-all
     KILL_SWITCH_TRIGGERED = "kill_switch_triggered"
@@ -154,3 +159,4 @@ class SessionSummary:
     final_positions: list[Position]
     final_session_risk_state: SessionRiskState | None
     succeeded: bool = True
+    duplicate_orders_blocked: int = 0

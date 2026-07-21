@@ -62,6 +62,19 @@ class ExecutionSessionResult:
     ``symbols_with_signals`` supports multi-symbol session reporting: it
     is the set of symbols any signal was generated for, independent of
     whether that signal resulted in an order.
+    ``duplicate_orders_blocked`` counts entry/exit orders the
+    idempotency guard refused to place a second time because their
+    deterministic reference id (see ``core/execution/idempotency.py``)
+    had already been used this session - distinct from
+    ``rejected_signals``, since a blocked duplicate was never a rejected
+    trading decision, just a repeat of one already acted on.
+    ``errors_encountered`` counts bars where processing raised an
+    unexpected exception (see ``ExecutionOrchestrator.run_session``'s
+    per-bar error isolation) - the bar's remaining symbols/history still
+    get skipped for that one bar rather than ending the whole session,
+    but a non-zero count here means the session finished with silently
+    degraded coverage and is worth a human looking at ``ORCHESTRATOR_ERROR``
+    events in the audit log.
     """
 
     trading_date: date
@@ -72,6 +85,8 @@ class ExecutionSessionResult:
     rejected_signals: int = 0
     skipped_due_to_session_guardrails: int = 0
     skipped_due_to_position_limits: int = 0
+    duplicate_orders_blocked: int = 0
+    errors_encountered: int = 0
     placed_orders: list[Order] = field(default_factory=list)
     sizing_decisions: list[PositionSizingDecision] = field(default_factory=list)
     exit_decisions: list[ExitDecision] = field(default_factory=list)

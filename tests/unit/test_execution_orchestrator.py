@@ -7,7 +7,7 @@ Run with:
 from __future__ import annotations
 
 import unittest
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from core.broker.base import OrderRequest, OrderSide
 from core.broker.paper import PaperBroker
@@ -43,6 +43,21 @@ class NeverSignalStrategy(Strategy):
 
     def on_bar(self, bar, history, open_positions):
         return []
+
+
+class DoubleSignalStrategy(Strategy):
+    """Test strategy simulating a bug: emits the same BUY signal twice for one bar."""
+
+    def on_bar(self, bar, history, open_positions):
+        signal = TradeSignal(
+            strategy_name=self.context.strategy_name,
+            symbol=bar.symbol,
+            exchange=bar.exchange,
+            side=SignalSide.BUY,
+            timestamp=bar.timestamp,
+            reason="test_double_signal",
+        )
+        return [signal, signal]
 
 
 class BuyOnceEverStrategy(Strategy):
@@ -159,7 +174,7 @@ def make_bars(count: int, symbol: str = "TEST") -> list[MarketBar]:
         MarketBar(
             symbol=symbol,
             exchange="NSE",
-            timestamp=base_time,
+            timestamp=base_time + timedelta(minutes=i),  # distinct per bar, like real market data
             open=100.0,
             high=100.0,
             low=100.0,
@@ -352,6 +367,47 @@ class ExecutionOrchestratorTests(unittest.TestCase):
         self.assertEqual(len(result.placed_orders), 3)
         # Same-direction accumulation: 3 buys of qty=2 each -> total qty 6
         self.assertEqual(result.final_positions[0].quantity, 6)
+
+    def test_duplicate_signal_for_the_same_bar_places_only_one_order(self) -> None:
+        # Simulates a strategy bug that emits the "same" BUY signal twice
+        # for one bar: the idempotency guard must block the second one
+        # rather than double-entering the position.
+        bars = make_bars(1)
+        orchestrator, broker = make_orchestrator(
+            bars, FakeRiskManager(approve=True), "double_signal", DoubleSignalStrategy
+        )
+        config = make_config(
+            "double_signal", ["TEST"], allocation_plan=make_allocation_plan(max_capital_per_trade=100.0)
+        )
+
+        result = orchestrator.run_session(config)
+
+        self.assertEqual(result.generated_signals, 2)
+        self.assertEqual(result.approved_signals, 1)
+        self.assertEqual(result.rejected_signals, 0)
+        self.assertEqual(result.duplicate_orders_blocked, 1)
+        self.assertEqual(len(result.placed_orders), 1)
+        self.assertEqual(result.final_positions[0].quantity, 1)
+
+    def test_orchestrator_sets_a_client_order_id_on_placed_orders(self) -> None:
+        # White-box: PaperBroker only ever populates _orders_by_client_id
+        # when place_order() receives an OrderRequest with client_order_id
+        # set, so a non-empty map here proves the orchestrator is setting
+        # it (see build_order_from_signal's client_order_id parameter).
+        bars = make_bars(1)
+        orchestrator, broker = make_orchestrator(
+            bars, FakeRiskManager(approve=True), "always_buy", AlwaysBuyStrategy
+        )
+        config = make_config(
+            "always_buy", ["TEST"], allocation_plan=make_allocation_plan(max_capital_per_trade=100.0)
+        )
+
+        result = orchestrator.run_session(config)
+
+        self.assertEqual(len(broker._orders_by_client_id), 1)
+        (client_order_id, order_id), = broker._orders_by_client_id.items()
+        self.assertEqual(order_id, result.placed_orders[0].order_id)
+        self.assertTrue(client_order_id)
 
     def test_result_carries_trading_date_and_strategy_name(self) -> None:
         bars = make_bars(1)

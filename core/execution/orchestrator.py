@@ -9,6 +9,7 @@ from core.broker.base import (
     OrderType,
     ProductType,
 )
+from core.execution.idempotency import OrderIdempotencyGuard, build_order_reference_id
 from core.execution.models import ExecutionSessionResult, TradingSessionConfig
 from core.market_data.service import MarketDataService
 from core.portfolio.exit_models import ExitDecision
@@ -23,12 +24,18 @@ from core.strategy.registry import StrategyRegistry
 from core.strategy.registry import registry as default_strategy_registry
 
 
-def build_order_from_signal(signal: TradeSignal, quantity: int, price: float) -> OrderRequest:
+def build_order_from_signal(
+    signal: TradeSignal, quantity: int, price: float, client_order_id: str | None = None
+) -> OrderRequest:
     """
     Convert a strategy ``TradeSignal`` into a broker ``OrderRequest``.
 
     V1 only converts BUY/SELL signals into intraday limit orders at the
     triggering bar's close price. EXIT signals are not yet supported.
+    ``client_order_id`` is the idempotency key ``run_session`` computes
+    per signal (see ``core/execution/idempotency.py``) - optional here
+    only so this function stays usable on its own (e.g. in tests)
+    without needing one.
     """
     if signal.side == SignalSide.BUY:
         side = OrderSide.BUY
@@ -47,16 +54,20 @@ def build_order_from_signal(signal: TradeSignal, quantity: int, price: float) ->
         price=price,
         strategy_name=signal.strategy_name,
         metadata={"signal_reason": signal.reason, **signal.metadata},
+        client_order_id=client_order_id,
     )
 
 
-def build_exit_order(decision: ExitDecision, strategy_name: str) -> OrderRequest:
+def build_exit_order(
+    decision: ExitDecision, strategy_name: str, client_order_id: str | None = None
+) -> OrderRequest:
     """
     Convert an ``ExitDecision`` into a broker ``OrderRequest``.
 
     V1 only tracks long positions, so an exit is always a sell of the full
     tracked quantity, placed as a market order (the position should close
     regardless of small slippage against the triggering bar's close).
+    ``client_order_id`` - see ``build_order_from_signal``.
     """
     return OrderRequest(
         symbol=decision.symbol,
@@ -68,6 +79,7 @@ def build_exit_order(decision: ExitDecision, strategy_name: str) -> OrderRequest
         price=decision.exit_price,
         strategy_name=strategy_name,
         metadata={"exit_reason": decision.reason, **decision.metadata},
+        client_order_id=client_order_id,
     )
 
 
@@ -187,6 +199,7 @@ class ExecutionOrchestrator:
         position_manager = PositionManager()
         session_guardrails = SessionRiskGuardrails(plan)
         exposure_guardrails = PortfolioExposureGuardrails(plan)
+        idempotency_guard = OrderIdempotencyGuard()
         history_by_symbol: dict[str, list[MarketBar]] = {}
         used_intraday_capital = 0.0
         guardrail_block_emitted = False
@@ -214,190 +227,254 @@ class ExecutionOrchestrator:
             bar_key = f"{bar.exchange}:{bar.symbol}"
             symbol_history = history_by_symbol.setdefault(bar_key, [])
 
-            if config.exit_policy is not None:
-                tracked_positions = position_manager.open_positions()
-                for exit_decision in position_manager.evaluate_exits(bar, config.exit_policy):
-                    result.exit_decisions.append(exit_decision)
+            try:
+                if config.exit_policy is not None:
+                    tracked_positions = position_manager.open_positions()
+                    for exit_decision in position_manager.evaluate_exits(bar, config.exit_policy):
+                        result.exit_decisions.append(exit_decision)
+                        self._emit(
+                            AuditEventType.EXIT_TRIGGERED,
+                            symbol=exit_decision.symbol,
+                            strategy_name=config.strategy_name,
+                            exchange=exit_decision.exchange,
+                            reason=exit_decision.reason,
+                            quantity=exit_decision.quantity,
+                            exit_price=exit_decision.exit_price,
+                        )
+
+                        exit_reference_id = build_order_reference_id(
+                            strategy_name=config.strategy_name,
+                            exchange=exit_decision.exchange,
+                            symbol=exit_decision.symbol,
+                            side=OrderSide.SELL,
+                            timestamp=bar.timestamp,
+                            intent=f"exit:{exit_decision.reason}",
+                        )
+                        if not idempotency_guard.check_and_record(exit_reference_id):
+                            result.duplicate_orders_blocked += 1
+                            self._emit(
+                                AuditEventType.DUPLICATE_ORDER_BLOCKED,
+                                symbol=exit_decision.symbol,
+                                strategy_name=config.strategy_name,
+                                reference_id=exit_reference_id,
+                                intent=f"exit:{exit_decision.reason}",
+                            )
+                            continue
+
+                        exit_request = build_exit_order(
+                            exit_decision, config.strategy_name, client_order_id=exit_reference_id
+                        )
+                        exit_order = self.broker.place_order(exit_request)
+                        result.exit_orders.append(exit_order)
+                        self._emit(
+                            AuditEventType.EXIT_ORDER_PLACED,
+                            symbol=exit_order.symbol,
+                            strategy_name=config.strategy_name,
+                            order_id=exit_order.order_id,
+                            status=exit_order.status.value,
+                            quantity=exit_order.quantity,
+                            average_price=exit_order.average_price,
+                        )
+                        position_manager.clear(exit_decision.symbol, exit_decision.exchange)
+
+                        tracked = tracked_positions.get(
+                            f"{exit_decision.exchange}:{exit_decision.symbol}"
+                        )
+                        if tracked is not None and exit_order.average_price is not None:
+                            realized_pnl = (
+                                exit_order.average_price - tracked.entry_price
+                            ) * exit_decision.quantity
+                            session_guardrails.record_realized_pnl(realized_pnl)
+                            emit_guardrail_block_if_newly_triggered()
+
+                open_positions = {
+                    f"{p.exchange}:{p.symbol}": p
+                    for p in self.broker.list_positions()
+                    if p.quantity != 0
+                }
+
+                signals = strategy.on_bar(
+                    bar=bar, history=symbol_history, open_positions=open_positions
+                )
+                result.generated_signals += len(signals)
+                result.symbols_with_signals.update(signal.symbol for signal in signals)
+
+                for signal in signals:
                     self._emit(
-                        AuditEventType.EXIT_TRIGGERED,
-                        symbol=exit_decision.symbol,
+                        AuditEventType.SIGNAL_GENERATED,
+                        symbol=signal.symbol,
+                        strategy_name=signal.strategy_name,
+                        side=signal.side.value,
+                        reason=signal.reason,
+                        confidence=signal.confidence,
+                    )
+
+                    guardrail_decision = session_guardrails.check_entry_allowed()
+                    if not guardrail_decision.allowed:
+                        result.skipped_due_to_session_guardrails += 1
+                        result.rejected_signals += 1
+                        self._emit(
+                            AuditEventType.SIGNAL_REJECTED,
+                            symbol=signal.symbol,
+                            strategy_name=signal.strategy_name,
+                            rejection_stage="session_guardrail",
+                            reason=guardrail_decision.reason,
+                        )
+                        continue
+
+                    sizing_request = PositionSizingRequest(
+                        symbol=signal.symbol,
+                        exchange=signal.exchange,
+                        side=signal.side,
+                        price=bar.close,
+                        portfolio_allocation_plan=plan,
+                        strategy_metadata=signal.metadata,
+                    )
+                    sizing_decision = self.position_sizing_engine.size(sizing_request)
+                    result.sizing_decisions.append(sizing_decision)
+
+                    if sizing_decision.approved_quantity <= 0:
+                        result.rejected_signals += 1
+                        self._emit(
+                            AuditEventType.SIGNAL_REJECTED,
+                            symbol=signal.symbol,
+                            strategy_name=signal.strategy_name,
+                            rejection_stage="sizing",
+                            reason=sizing_decision.reason,
+                        )
+                        continue
+
+                    exposure_decision = exposure_guardrails.check_new_entry(
+                        symbol=signal.symbol,
+                        exchange=signal.exchange,
+                        proposed_notional=sizing_decision.capital_used,
+                        open_positions=open_positions,
+                    )
+                    if not exposure_decision.allowed:
+                        result.skipped_due_to_position_limits += 1
+                        result.rejected_signals += 1
+                        self._emit(
+                            AuditEventType.SIGNAL_REJECTED,
+                            symbol=signal.symbol,
+                            strategy_name=signal.strategy_name,
+                            rejection_stage="exposure",
+                            reason=exposure_decision.reason,
+                        )
+                        continue
+
+                    order = build_order_from_signal(
+                        signal,
+                        quantity=sizing_decision.approved_quantity,
+                        price=bar.close,
+                    )
+
+                    entry_reference_id = build_order_reference_id(
+                        strategy_name=signal.strategy_name,
+                        exchange=signal.exchange,
+                        symbol=signal.symbol,
+                        side=order.side,
+                        timestamp=bar.timestamp,
+                        intent="entry",
+                    )
+                    if not idempotency_guard.check_and_record(entry_reference_id):
+                        result.duplicate_orders_blocked += 1
+                        self._emit(
+                            AuditEventType.DUPLICATE_ORDER_BLOCKED,
+                            symbol=signal.symbol,
+                            strategy_name=signal.strategy_name,
+                            reference_id=entry_reference_id,
+                            intent="entry",
+                        )
+                        continue
+                    order.client_order_id = entry_reference_id
+
+                    risk_context = RiskContext(
+                        available_intraday_capital=plan.intraday_capital,
+                        used_intraday_capital=used_intraday_capital,
+                        daily_realized_pnl=session_guardrails.state.realized_pnl,
+                        trades_taken_today=session_guardrails.state.entries_taken,
+                        max_daily_loss=plan.max_daily_loss,
+                        max_trades_per_day=plan.max_trades_per_day,
+                        target_pct=config.exit_policy.target_pct if config.exit_policy else None,
+                    )
+
+                    decision = self.risk_manager.evaluate(order, risk_context)
+
+                    if not decision.approved:
+                        result.rejected_signals += 1
+                        self._emit(
+                            AuditEventType.SIGNAL_REJECTED,
+                            symbol=signal.symbol,
+                            strategy_name=signal.strategy_name,
+                            rejection_stage="risk_manager",
+                            reason=decision.reason,
+                        )
+                        continue
+
+                    result.approved_signals += 1
+                    self._emit(
+                        AuditEventType.SIGNAL_APPROVED,
+                        symbol=signal.symbol,
+                        strategy_name=signal.strategy_name,
+                        quantity=sizing_decision.approved_quantity,
+                    )
+
+                    self._emit(
+                        AuditEventType.ORDER_SUBMITTED,
+                        symbol=order.symbol,
                         strategy_name=config.strategy_name,
-                        exchange=exit_decision.exchange,
-                        reason=exit_decision.reason,
-                        quantity=exit_decision.quantity,
-                        exit_price=exit_decision.exit_price,
+                        side=order.side.value,
+                        quantity=order.quantity,
+                        order_type=order.order_type.value,
+                        price=order.price,
                     )
-
-                    exit_request = build_exit_order(exit_decision, config.strategy_name)
-                    exit_order = self.broker.place_order(exit_request)
-                    result.exit_orders.append(exit_order)
+                    placed = self.broker.place_order(order)
+                    result.placed_orders.append(placed)
                     self._emit(
-                        AuditEventType.EXIT_ORDER_PLACED,
-                        symbol=exit_order.symbol,
-                        strategy_name=config.strategy_name,
-                        order_id=exit_order.order_id,
-                        status=exit_order.status.value,
-                        quantity=exit_order.quantity,
-                        average_price=exit_order.average_price,
-                    )
-                    position_manager.clear(exit_decision.symbol, exit_decision.exchange)
-
-                    tracked = tracked_positions.get(
-                        f"{exit_decision.exchange}:{exit_decision.symbol}"
-                    )
-                    if tracked is not None and exit_order.average_price is not None:
-                        realized_pnl = (
-                            exit_order.average_price - tracked.entry_price
-                        ) * exit_decision.quantity
-                        session_guardrails.record_realized_pnl(realized_pnl)
-                        emit_guardrail_block_if_newly_triggered()
-
-            open_positions = {
-                f"{p.exchange}:{p.symbol}": p
-                for p in self.broker.list_positions()
-                if p.quantity != 0
-            }
-
-            signals = strategy.on_bar(
-                bar=bar, history=symbol_history, open_positions=open_positions
-            )
-            result.generated_signals += len(signals)
-            result.symbols_with_signals.update(signal.symbol for signal in signals)
-
-            for signal in signals:
-                self._emit(
-                    AuditEventType.SIGNAL_GENERATED,
-                    symbol=signal.symbol,
-                    strategy_name=signal.strategy_name,
-                    side=signal.side.value,
-                    reason=signal.reason,
-                    confidence=signal.confidence,
-                )
-
-                guardrail_decision = session_guardrails.check_entry_allowed()
-                if not guardrail_decision.allowed:
-                    result.skipped_due_to_session_guardrails += 1
-                    result.rejected_signals += 1
-                    self._emit(
-                        AuditEventType.SIGNAL_REJECTED,
-                        symbol=signal.symbol,
-                        strategy_name=signal.strategy_name,
-                        rejection_stage="session_guardrail",
-                        reason=guardrail_decision.reason,
-                    )
-                    continue
-
-                sizing_request = PositionSizingRequest(
-                    symbol=signal.symbol,
-                    exchange=signal.exchange,
-                    side=signal.side,
-                    price=bar.close,
-                    portfolio_allocation_plan=plan,
-                    strategy_metadata=signal.metadata,
-                )
-                sizing_decision = self.position_sizing_engine.size(sizing_request)
-                result.sizing_decisions.append(sizing_decision)
-
-                if sizing_decision.approved_quantity <= 0:
-                    result.rejected_signals += 1
-                    self._emit(
-                        AuditEventType.SIGNAL_REJECTED,
-                        symbol=signal.symbol,
-                        strategy_name=signal.strategy_name,
-                        rejection_stage="sizing",
-                        reason=sizing_decision.reason,
-                    )
-                    continue
-
-                exposure_decision = exposure_guardrails.check_new_entry(
-                    symbol=signal.symbol,
-                    exchange=signal.exchange,
-                    proposed_notional=sizing_decision.capital_used,
-                    open_positions=open_positions,
-                )
-                if not exposure_decision.allowed:
-                    result.skipped_due_to_position_limits += 1
-                    result.rejected_signals += 1
-                    self._emit(
-                        AuditEventType.SIGNAL_REJECTED,
-                        symbol=signal.symbol,
-                        strategy_name=signal.strategy_name,
-                        rejection_stage="exposure",
-                        reason=exposure_decision.reason,
-                    )
-                    continue
-
-                order = build_order_from_signal(
-                    signal,
-                    quantity=sizing_decision.approved_quantity,
-                    price=bar.close,
-                )
-
-                risk_context = RiskContext(
-                    available_intraday_capital=plan.intraday_capital,
-                    used_intraday_capital=used_intraday_capital,
-                    daily_realized_pnl=session_guardrails.state.realized_pnl,
-                    trades_taken_today=session_guardrails.state.entries_taken,
-                    max_daily_loss=plan.max_daily_loss,
-                    max_trades_per_day=plan.max_trades_per_day,
-                )
-
-                decision = self.risk_manager.evaluate(order, risk_context)
-
-                if not decision.approved:
-                    result.rejected_signals += 1
-                    self._emit(
-                        AuditEventType.SIGNAL_REJECTED,
-                        symbol=signal.symbol,
-                        strategy_name=signal.strategy_name,
-                        rejection_stage="risk_manager",
-                        reason=decision.reason,
-                    )
-                    continue
-
-                result.approved_signals += 1
-                self._emit(
-                    AuditEventType.SIGNAL_APPROVED,
-                    symbol=signal.symbol,
-                    strategy_name=signal.strategy_name,
-                    quantity=sizing_decision.approved_quantity,
-                )
-
-                self._emit(
-                    AuditEventType.ORDER_SUBMITTED,
-                    symbol=order.symbol,
-                    strategy_name=config.strategy_name,
-                    side=order.side.value,
-                    quantity=order.quantity,
-                    order_type=order.order_type.value,
-                    price=order.price,
-                )
-                placed = self.broker.place_order(order)
-                result.placed_orders.append(placed)
-                self._emit(
-                    AuditEventType.ORDER_PLACED,
-                    symbol=placed.symbol,
-                    strategy_name=config.strategy_name,
-                    order_id=placed.order_id,
-                    status=placed.status.value,
-                    quantity=placed.quantity,
-                    filled_quantity=placed.filled_quantity,
-                    average_price=placed.average_price,
-                )
-
-                used_intraday_capital += (placed.average_price or 0.0) * placed.quantity
-                session_guardrails.record_entry()
-                emit_guardrail_block_if_newly_triggered()
-
-                if order.side == OrderSide.BUY:
-                    position_manager.register_entry(
+                        AuditEventType.ORDER_PLACED,
                         symbol=placed.symbol,
-                        exchange=placed.exchange,
+                        strategy_name=config.strategy_name,
+                        order_id=placed.order_id,
+                        status=placed.status.value,
                         quantity=placed.quantity,
-                        entry_price=placed.average_price or 0.0,
-                        entry_time=bar.timestamp,
-                        strategy_name=signal.strategy_name,
+                        filled_quantity=placed.filled_quantity,
+                        average_price=placed.average_price,
                     )
+
+                    used_intraday_capital += (placed.average_price or 0.0) * placed.quantity
+                    session_guardrails.record_entry()
+                    emit_guardrail_block_if_newly_triggered()
+
+                    if order.side == OrderSide.BUY:
+                        position_manager.register_entry(
+                            symbol=placed.symbol,
+                            exchange=placed.exchange,
+                            quantity=placed.quantity,
+                            entry_price=placed.average_price or 0.0,
+                            entry_time=bar.timestamp,
+                            strategy_name=signal.strategy_name,
+                        )
+            except Exception as exc:  # noqa: BLE001 - isolate one bad bar, keep the session alive
+                # A transient/unrecoverable error processing this one bar (any
+                # symbol) must not end the whole multi-symbol session - the
+                # transport layer already retries/circuit-breaks safe calls
+                # (see core/utils/resilience.py), so an exception reaching
+                # here means that was exhausted or the failure was in
+                # non-retryable code (e.g. a write, or a strategy bug). Known
+                # gap: if this happened after place_order was sent but before
+                # its response arrived, this process can't know whether the
+                # broker actually received it - the next bar's fresh
+                # broker.list_positions() call is the mitigation (positions
+                # are always read from the broker, never assumed from local
+                # state), not a full exactly-once guarantee.
+                result.errors_encountered += 1
+                self._emit(
+                    AuditEventType.ORCHESTRATOR_ERROR,
+                    symbol=bar.symbol,
+                    strategy_name=config.strategy_name,
+                    error_type=type(exc).__name__,
+                    message=str(exc),
+                )
 
             symbol_history.append(bar)
 

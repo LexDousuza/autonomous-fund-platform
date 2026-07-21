@@ -95,6 +95,21 @@ class BuyOnceEverStrategy(Strategy):
         ]
 
 
+class DoubleSignalStrategy(Strategy):
+    """Test strategy simulating a bug: emits the same BUY signal twice for one bar."""
+
+    def on_bar(self, bar, history, open_positions):
+        signal = TradeSignal(
+            strategy_name=self.context.strategy_name,
+            symbol=bar.symbol,
+            exchange=bar.exchange,
+            side=SignalSide.BUY,
+            timestamp=bar.timestamp,
+            reason="test_double_signal",
+        )
+        return [signal, signal]
+
+
 class FakeRiskManager(RiskManager):
     """Test risk manager with a fixed approve/reject outcome."""
 
@@ -343,6 +358,26 @@ class OrderEventTests(unittest.TestCase):
 
         # submitted must precede placed
         self.assertLess(sink.events.index(submitted[0]), sink.events.index(placed[0]))
+
+
+class DuplicateOrderEventTests(unittest.TestCase):
+    def test_duplicate_order_blocked_event_is_emitted_for_the_second_signal(self) -> None:
+        sink = InMemoryAuditSink()
+        bars = make_bars(1)
+        orchestrator, _ = make_orchestrator(
+            bars, FakeRiskManager(approve=True), "double_signal", DoubleSignalStrategy, audit_sink=sink
+        )
+        config = make_config("double_signal", ["TEST"])
+
+        orchestrator.run_session(config)
+
+        blocked = sink.events_of_type(AuditEventType.DUPLICATE_ORDER_BLOCKED)
+        placed = sink.events_of_type(AuditEventType.ORDER_PLACED)
+        self.assertEqual(len(blocked), 1)
+        self.assertEqual(len(placed), 1)
+        self.assertEqual(blocked[0].symbol, "TEST")
+        self.assertEqual(blocked[0].payload["intent"], "entry")
+        self.assertTrue(blocked[0].payload["reference_id"])
 
 
 class ExitEventTests(unittest.TestCase):
