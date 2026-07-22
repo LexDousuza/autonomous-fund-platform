@@ -59,6 +59,10 @@ class MissingKiteCredentialsError(RuntimeError):
     """Raised when required Kite credentials are missing from the environment."""
 
 
+class MissingAngelOneCredentialsError(RuntimeError):
+    """Raised when required Angel One credentials are missing from the environment."""
+
+
 class LiveTradingNotConfirmedError(RuntimeError):
     """
     Raised when the live trader is configured to use a real live broker
@@ -105,6 +109,34 @@ class KiteEnvCredentials:
 
     api_key: str
     access_token: str
+
+
+@dataclass(slots=True)
+class AngelOneEnvCredentials:
+    """
+    Angel One (SmartAPI) credentials as read from the environment.
+
+    Angel One is deliberately scoped to historical market data only in
+    this platform - it is never a ``LiveTraderConfig.broker_provider``
+    or ``market_data_provider`` option (see
+    ``core/market_data/factory.py``'s ``"angelone"`` branch, which
+    refuses live/paper mode outright). This loader exists for the
+    backtester/scripts that fetch Angel One historical candles, not for
+    the live trader's own provider selection.
+
+    ``totp_secret`` is a base32 TOTP seed (the value shown under the
+    SmartAPI "TOTP" QR code at setup), not a static code - a live
+    6-digit code is computed from it per session (see
+    ``core/utils/totp.py`` and ``core/market_data/angelone_transport.py``).
+    Unlike Kite Connect's ``access_token``, nothing here expires daily in
+    a way that needs a manual browser-login step - the whole login flow
+    is headless.
+    """
+
+    api_key: str
+    client_code: str
+    password: str
+    totp_secret: str
 
 
 @dataclass(slots=True)
@@ -221,6 +253,46 @@ def load_kite_credentials_from_env() -> KiteEnvCredentials:
         )
 
     return KiteEnvCredentials(api_key=api_key, access_token=access_token)
+
+
+def load_angelone_credentials_from_env() -> AngelOneEnvCredentials:
+    """
+    Read Angel One (SmartAPI) credentials from environment variables.
+
+    Required: ``ANGELONE_API_KEY``, ``ANGELONE_CLIENT_CODE``,
+    ``ANGELONE_PASSWORD``, ``ANGELONE_TOTP_SECRET``. See
+    ``AngelOneEnvCredentials``'s docstring for what each is and why this
+    loader isn't part of the live trader's own broker/market-data
+    provider selection.
+
+    Raises ``MissingAngelOneCredentialsError`` immediately if a required
+    variable is missing or blank.
+    """
+    api_key = os.environ.get("ANGELONE_API_KEY", "").strip()
+    client_code = os.environ.get("ANGELONE_CLIENT_CODE", "").strip()
+    password = os.environ.get("ANGELONE_PASSWORD", "").strip()
+    totp_secret = os.environ.get("ANGELONE_TOTP_SECRET", "").strip()
+
+    missing = [
+        name
+        for name, value in (
+            ("ANGELONE_API_KEY", api_key),
+            ("ANGELONE_CLIENT_CODE", client_code),
+            ("ANGELONE_PASSWORD", password),
+            ("ANGELONE_TOTP_SECRET", totp_secret),
+        )
+        if not value
+    ]
+
+    if missing:
+        raise MissingAngelOneCredentialsError(
+            "Missing required Angel One credentials in environment: "
+            f"{', '.join(missing)}."
+        )
+
+    return AngelOneEnvCredentials(
+        api_key=api_key, client_code=client_code, password=password, totp_secret=totp_secret
+    )
 
 
 def _parse_bool_env(name: str, default: bool) -> bool:

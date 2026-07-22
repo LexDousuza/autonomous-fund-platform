@@ -2,3 +2,7 @@ PyYAML==6.0.3
 growwapi==1.5.0
 kiteconnect==5.2.0
 boto3==1.43.52  # optional: only used by apps/live_trader/aws_secrets.py
+numpy==2.5.1  # already a transitive dependency (via growwapi -> pandas); pinned explicitly for core/pricing/monte_carlo.py
+smartapi-python==1.5.5  # Angel One SmartAPI - historical market data only, see core/market_data/angelone_transport.py
+logzero==1.7.0  # hard import-time dependency of smartapi-python (not declared in its own metadata)
+websocket-client==1.9.0  # hard import-time dependency of smartapi-python's __init__.py (not declared in its own metadata)

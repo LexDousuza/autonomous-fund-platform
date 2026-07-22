@@ -19,6 +19,8 @@ from unittest.mock import patch
 from apps.live_trader.config import (
     LIVE_CONFIRM_REQUIRED_VALUE,
     LiveTradingNotConfirmedError,
+    MissingAngelOneCredentialsError,
+    load_angelone_credentials_from_env,
     load_live_trader_config_from_env,
 )
 
@@ -250,6 +252,65 @@ class LoadLiveTraderConfigFromEnvTests(unittest.TestCase):
 
         os.environ["LIVE_MAX_BARS"] = "10"
         self.assertEqual(load_live_trader_config_from_env().max_bars, 10)
+
+
+_ANGELONE_ENV_VARS = (
+    "ANGELONE_API_KEY",
+    "ANGELONE_CLIENT_CODE",
+    "ANGELONE_PASSWORD",
+    "ANGELONE_TOTP_SECRET",
+)
+
+
+class LoadAngelOneCredentialsFromEnvTests(unittest.TestCase):
+    """
+    Angel One is historical-data only in this platform - never a
+    LiveTraderConfig broker/market-data provider option (see
+    core/market_data/factory.py) - so this loader is tested standalone,
+    not through load_live_trader_config_from_env().
+    """
+
+    def setUp(self) -> None:
+        patcher = patch.dict(os.environ, {}, clear=False)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        for var in _ANGELONE_ENV_VARS:
+            os.environ.pop(var, None)
+
+    def test_all_four_present_returns_credentials(self) -> None:
+        os.environ["ANGELONE_API_KEY"] = "key"
+        os.environ["ANGELONE_CLIENT_CODE"] = "C123"
+        os.environ["ANGELONE_PASSWORD"] = "1234"
+        os.environ["ANGELONE_TOTP_SECRET"] = "JBSWY3DPEHPK3PXP"
+
+        credentials = load_angelone_credentials_from_env()
+
+        self.assertEqual(credentials.api_key, "key")
+        self.assertEqual(credentials.client_code, "C123")
+        self.assertEqual(credentials.password, "1234")
+        self.assertEqual(credentials.totp_secret, "JBSWY3DPEHPK3PXP")
+
+    def test_any_missing_var_raises_with_all_missing_names_listed(self) -> None:
+        os.environ["ANGELONE_API_KEY"] = "key"
+        # client_code, password, totp_secret left unset
+
+        with self.assertRaises(MissingAngelOneCredentialsError) as ctx:
+            load_angelone_credentials_from_env()
+
+        message = str(ctx.exception)
+        self.assertIn("ANGELONE_CLIENT_CODE", message)
+        self.assertIn("ANGELONE_PASSWORD", message)
+        self.assertIn("ANGELONE_TOTP_SECRET", message)
+        self.assertNotIn("ANGELONE_API_KEY", message)
+
+    def test_blank_var_treated_as_missing(self) -> None:
+        os.environ["ANGELONE_API_KEY"] = "key"
+        os.environ["ANGELONE_CLIENT_CODE"] = "   "
+        os.environ["ANGELONE_PASSWORD"] = "1234"
+        os.environ["ANGELONE_TOTP_SECRET"] = "JBSWY3DPEHPK3PXP"
+
+        with self.assertRaises(MissingAngelOneCredentialsError):
+            load_angelone_credentials_from_env()
 
 
 if __name__ == "__main__":

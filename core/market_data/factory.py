@@ -14,6 +14,18 @@ means adding a branch here. Mirrors ``core/broker/factory.py``'s shape.
 
 from __future__ import annotations
 
+from datetime import date
+
+from core.market_data.angelone_historical_feed import (
+    AngelOneHistoricalFeedSettings,
+    AngelOneHistoricalInstrument,
+    AngelOneHistoricalMarketDataFeed,
+)
+from core.market_data.angelone_transport import (
+    AngelOneMarketDataCredentials,
+    AngelOneMarketDataTransport,
+    AngelOneMarketDataTransportConfig,
+)
 from core.market_data.base import MarketDataFeed
 from core.market_data.csv_feed import CSVMarketDataFeed
 from core.market_data.factory_models import MarketDataConfig
@@ -41,7 +53,7 @@ from core.market_data.kite_transport import (
 )
 from core.market_data.memory_feed import MemoryMarketDataFeed
 
-_SUPPORTED_PROVIDERS = {"memory", "csv", "groww", "kite"}
+_SUPPORTED_PROVIDERS = {"memory", "csv", "groww", "kite", "angelone"}
 _SUPPORTED_MODES = {"paper", "live", "historical"}
 
 _DEFAULT_POLL_INTERVAL_SECONDS = 5.0
@@ -50,6 +62,7 @@ _DEFAULT_TIMEOUT_SECONDS = 10.0
 _DEFAULT_EXCHANGE = "NSE"
 _DEFAULT_HISTORICAL_INTERVAL = "1day"  # real growwapi CANDLE_INTERVAL_DAY value
 _DEFAULT_KITE_HISTORICAL_INTERVAL = "day"  # real kiteconnect candle-interval value
+_DEFAULT_ANGELONE_HISTORICAL_INTERVAL = "ONE_DAY"  # real SmartAPI interval value
 
 
 def build_market_data_feed(config: MarketDataConfig) -> MarketDataFeed:
@@ -67,6 +80,11 @@ def build_market_data_feed(config: MarketDataConfig) -> MarketDataFeed:
     - ``provider="groww"``, ``mode="historical"`` -> ``GrowwHistoricalMarketDataFeed``
       (batch-fetched, see ``groww_historical_feed.py``). ``mode="paper"``
       raises: see ``MarketDataConfig``'s docstring for why.
+    - ``provider="angelone"``, ``mode="historical"`` -> ``AngelOneHistoricalMarketDataFeed``
+      (batch-fetched, see ``angelone_historical_feed.py``). ``mode="live"``/
+      ``mode="paper"`` both raise - Angel One is deliberately scoped to
+      historical data only in this platform; Kite is the only live/paper
+      trading broker/market-data provider.
 
     Raises ``ValueError`` for an unknown ``mode``, an unknown
     ``provider``, a provider/mode combination that doesn't make sense, or
@@ -107,6 +125,17 @@ def build_market_data_feed(config: MarketDataConfig) -> MarketDataFeed:
             "Invalid market data config: provider='kite' only supports "
             f"mode='live' or mode='historical' (got mode='{config.mode}') - "
             "Kite Connect has no separate paper/sandbox market-data mode at all."
+        )
+
+    if provider == "angelone":
+        if mode == "historical":
+            return _build_angelone_historical_feed(config)
+        raise ValueError(
+            "Invalid market data config: provider='angelone' only supports "
+            f"mode='historical' (got mode='{config.mode}') - Angel One is "
+            "deliberately scoped to historical data only in this platform; "
+            "Kite is the only live/paper trading broker/market-data provider. "
+            "See core/market_data/angelone_transport.py's module docstring."
         )
 
     raise ValueError(
@@ -255,3 +284,56 @@ def _build_kite_historical_feed(config: MarketDataConfig) -> KiteHistoricalMarke
     settings = KiteHistoricalFeedSettings(from_date=from_date, to_date=to_date, interval=interval)
 
     return KiteHistoricalMarketDataFeed(transport=transport, instruments=instruments, settings=settings)
+
+
+def _build_angelone_historical_feed(config: MarketDataConfig) -> AngelOneHistoricalMarketDataFeed:
+    api_key = config.metadata.get("api_key")
+    client_code = config.metadata.get("client_code")
+    password = config.metadata.get("password")
+    totp_secret = config.metadata.get("totp_secret")
+
+    if not api_key or not client_code or not password or not totp_secret:
+        raise ValueError(
+            "Angel One market data config requires 'api_key', 'client_code', "
+            "'password', and 'totp_secret' in metadata."
+        )
+
+    instruments_raw = config.metadata.get("instruments")
+    if not instruments_raw:
+        raise ValueError(
+            "Angel One historical market data config requires a non-empty "
+            "'instruments' list in metadata (each item: {'symbol': ..., 'exchange': ...})."
+        )
+
+    from_date_raw = config.metadata.get("from_date")
+    to_date_raw = config.metadata.get("to_date")
+    if not from_date_raw or not to_date_raw:
+        raise ValueError(
+            "Angel One historical market data config requires 'from_date' and "
+            "'to_date' in metadata."
+        )
+
+    credentials = AngelOneMarketDataCredentials(
+        api_key=api_key, client_code=client_code, password=password, totp_secret=totp_secret
+    )
+    timeout_seconds = config.metadata.get("timeout_seconds", _DEFAULT_TIMEOUT_SECONDS)
+    interval = config.metadata.get("interval", _DEFAULT_ANGELONE_HISTORICAL_INTERVAL)
+
+    transport = AngelOneMarketDataTransport(
+        AngelOneMarketDataTransportConfig(credentials=credentials, timeout_seconds=timeout_seconds)
+    )
+    instruments = [
+        AngelOneHistoricalInstrument(
+            symbol=item["symbol"], exchange=item.get("exchange", _DEFAULT_EXCHANGE)
+        )
+        for item in instruments_raw
+    ]
+    settings = AngelOneHistoricalFeedSettings(
+        from_date=date.fromisoformat(from_date_raw),
+        to_date=date.fromisoformat(to_date_raw),
+        interval=interval,
+    )
+
+    return AngelOneHistoricalMarketDataFeed(
+        transport=transport, instruments=instruments, settings=settings
+    )

@@ -18,6 +18,8 @@ from unittest.mock import patch
 
 from growwapi import GrowwAPI
 
+from core.market_data.angelone_historical_feed import AngelOneHistoricalMarketDataFeed
+from core.market_data.angelone_transport import AngelOneMarketDataTransport
 from core.market_data.csv_feed import CSVMarketDataFeed
 from core.market_data.factory import build_market_data_feed
 from core.market_data.factory_models import MarketDataConfig
@@ -209,6 +211,78 @@ class BuildMarketDataFeedTests(unittest.TestCase):
         feed = build_market_data_feed(MarketDataConfig(provider="MEMORY", mode="Paper"))
 
         self.assertIsInstance(feed, MemoryMarketDataFeed)
+
+
+class FakeAngelOneSmartConnect:
+    """Test double matching the subset of SmartApi.SmartConnect's interface build_market_data_feed exercises."""
+
+    def generateSession(self, client_code, password, totp):
+        return {"status": True, "data": {"jwtToken": "jwt", "refreshToken": "refresh", "feedToken": "feed"}}
+
+
+_ANGELONE_METADATA = {
+    "api_key": "key",
+    "client_code": "C123",
+    "password": "1234",
+    "totp_secret": "JBSWY3DPEHPK3PXP",
+    "instruments": [{"symbol": "RELIANCE", "exchange": "NSE"}],
+    "from_date": "2026-01-01",
+    "to_date": "2026-01-31",
+}
+
+
+@patch("core.market_data.angelone_transport.SmartConnect", return_value=FakeAngelOneSmartConnect())
+class BuildAngelOneMarketDataFeedTests(unittest.TestCase):
+    """
+    Building a real Angel One feed authenticates immediately (see
+    AngelOneMarketDataTransport._authenticate), so every test here mocks
+    SmartConnect itself - the class-level patch avoids a real call to
+    Angel One's real auth endpoint.
+    """
+
+    def test_angelone_live_mode_raises(self, mock_smart_connect) -> None:
+        # Angel One is historical-data only in this platform - see
+        # core/market_data/angelone_transport.py's module docstring.
+        with self.assertRaises(ValueError):
+            build_market_data_feed(
+                MarketDataConfig(provider="angelone", mode="live", metadata=_ANGELONE_METADATA)
+            )
+
+    def test_angelone_paper_mode_raises(self, mock_smart_connect) -> None:
+        with self.assertRaises(ValueError):
+            build_market_data_feed(
+                MarketDataConfig(provider="angelone", mode="paper", metadata=_ANGELONE_METADATA)
+            )
+
+    def test_angelone_without_credentials_raises(self, mock_smart_connect) -> None:
+        with self.assertRaises(ValueError):
+            build_market_data_feed(MarketDataConfig(provider="angelone", mode="historical"))
+
+    def test_angelone_historical_without_instruments_raises(self, mock_smart_connect) -> None:
+        metadata = {k: v for k, v in _ANGELONE_METADATA.items() if k != "instruments"}
+        with self.assertRaises(ValueError):
+            build_market_data_feed(MarketDataConfig(provider="angelone", mode="historical", metadata=metadata))
+
+    def test_angelone_historical_without_date_range_raises(self, mock_smart_connect) -> None:
+        metadata = {k: v for k, v in _ANGELONE_METADATA.items() if k not in ("from_date", "to_date")}
+        with self.assertRaises(ValueError):
+            build_market_data_feed(MarketDataConfig(provider="angelone", mode="historical", metadata=metadata))
+
+    @patch.object(AngelOneMarketDataTransport, "get_historical_candles")
+    def test_angelone_historical_config_builds_feed_with_expected_settings(
+        self, mock_fetch, mock_smart_connect
+    ) -> None:
+        mock_fetch.return_value = [["2026-01-01T09:15:00+05:30", 100.0, 101.0, 99.0, 100.5, 1000]]
+
+        feed = build_market_data_feed(
+            MarketDataConfig(provider="angelone", mode="historical", metadata=_ANGELONE_METADATA)
+        )
+
+        self.assertIsInstance(feed, AngelOneHistoricalMarketDataFeed)
+        mock_fetch.assert_called_once_with(
+            "RELIANCE", "NSE", "ONE_DAY", "2026-01-01 09:15", "2026-01-31 15:30"
+        )
+        self.assertEqual(len(feed.get_history("RELIANCE")), 1)
 
 
 if __name__ == "__main__":
