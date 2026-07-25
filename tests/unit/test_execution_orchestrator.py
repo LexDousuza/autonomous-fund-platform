@@ -9,15 +9,17 @@ from __future__ import annotations
 import unittest
 from datetime import date, datetime, timedelta
 
-from core.broker.base import OrderRequest, OrderSide
+from core.broker.base import OptionType, OrderRequest, OrderSide, PositionEffect
+from core.broker.estimated_margin import EstimatedSpanMarginCalculator
 from core.broker.paper import PaperBroker
 from core.execution.models import TradingSessionConfig
-from core.execution.orchestrator import ExecutionOrchestrator
+from core.execution.orchestrator import ExecutionOrchestrator, build_exit_order, build_order_from_signal
 from core.market_data.memory_feed import MemoryMarketDataFeed
 from core.market_data.service import MarketDataService
-from core.portfolio.exit_models import ExitPolicyConfig
+from core.portfolio.exit_models import ExitDecision, ExitPolicyConfig
 from core.portfolio.models import PortfolioAllocationPlan
 from core.risk.base import RiskContext, RiskDecision, RiskManager
+from core.risk.options_margin import OptionsMarginRiskManager
 from core.strategy.base import MarketBar, SignalSide, Strategy, StrategyContext, TradeSignal
 from core.strategy.registry import StrategyRegistry
 
@@ -79,6 +81,95 @@ class BuyOnceEverStrategy(Strategy):
                 side=SignalSide.BUY,
                 timestamp=bar.timestamp,
                 reason="test_buy_once",
+            )
+        ]
+
+
+class SellToOpenOnceStrategy(Strategy):
+    """Test strategy that emits exactly one naked-write-open SELL signal, on the first bar it sees."""
+
+    def __init__(self, context: StrategyContext) -> None:
+        super().__init__(context)
+        self._sold = False
+
+    def on_bar(self, bar, history, open_positions):
+        if self._sold:
+            return []
+        self._sold = True
+        return [
+            TradeSignal(
+                strategy_name=self.context.strategy_name,
+                symbol=bar.symbol,
+                exchange=bar.exchange,
+                side=SignalSide.SELL,
+                timestamp=bar.timestamp,
+                reason="test_sell_to_open_once",
+                metadata={"market_price": bar.close},
+                option_type=OptionType.CALL,
+                strike=100.0,
+                expiry="2026-08-27",
+                lot_size=1,
+                position_effect=PositionEffect.OPEN,
+            )
+        ]
+
+
+class AlwaysSellToOpenStrategy(Strategy):
+    """Test strategy that emits a naked-write-open SELL signal on every bar, unconditionally."""
+
+    def on_bar(self, bar, history, open_positions):
+        return [
+            TradeSignal(
+                strategy_name=self.context.strategy_name,
+                symbol=bar.symbol,
+                exchange=bar.exchange,
+                side=SignalSide.SELL,
+                timestamp=bar.timestamp,
+                reason="test_always_sell_to_open",
+                metadata={"market_price": bar.close},
+                option_type=OptionType.CALL,
+                strike=100.0,
+                expiry="2026-08-27",
+                lot_size=1,
+                position_effect=PositionEffect.OPEN,
+            )
+        ]
+
+
+class OnceOptionsSignalStrategy(Strategy):
+    """
+    Test strategy that emits exactly one options BUY/OPEN signal, on the
+    first bar it sees, with a configurable ``market_price`` metadata
+    value (or none at all) - used to prove the orchestrator prices/sizes
+    an options signal off this value, never off bar.close.
+    """
+
+    def __init__(self, context: StrategyContext) -> None:
+        super().__init__(context)
+        self._signaled = False
+
+    def on_bar(self, bar, history, open_positions):
+        if self._signaled:
+            return []
+        self._signaled = True
+        params = self.context.parameters or {}
+        metadata = {}
+        if "market_price" in params:
+            metadata["market_price"] = params["market_price"]
+        return [
+            TradeSignal(
+                strategy_name=self.context.strategy_name,
+                symbol=bar.symbol,
+                exchange=bar.exchange,
+                side=SignalSide.BUY,
+                timestamp=bar.timestamp,
+                reason="test_options_signal",
+                metadata=metadata,
+                option_type=OptionType.CALL,
+                strike=100.0,
+                expiry="2026-08-27",
+                lot_size=1,
+                position_effect=PositionEffect.OPEN,
             )
         ]
 
@@ -274,6 +365,7 @@ def make_config(
     symbols: list[str],
     allocation_plan: PortfolioAllocationPlan | None = None,
     exit_policy: ExitPolicyConfig | None = None,
+    available_margin: float | None = None,
 ) -> TradingSessionConfig:
     return TradingSessionConfig(
         trading_date=date(2026, 1, 1),
@@ -283,6 +375,7 @@ def make_config(
         symbols=symbols,
         portfolio_allocation_plan=allocation_plan or make_allocation_plan(),
         exit_policy=exit_policy,
+        available_margin=available_margin,
     )
 
 
@@ -787,6 +880,268 @@ class ExecutionOrchestratorTests(unittest.TestCase):
         aaa_position = next(p for p in result.final_positions if p.symbol == "AAA")
         self.assertEqual(aaa_position.quantity, 0)
         self.assertNotIn("BBB", [p.symbol for p in result.final_positions])
+
+
+class BuildOrderFromSignalOptionsFieldsTests(unittest.TestCase):
+    def test_cash_equity_signal_leaves_options_fields_at_defaults(self) -> None:
+        signal = TradeSignal(
+            strategy_name="test",
+            symbol="RELIANCE",
+            exchange="NSE",
+            side=SignalSide.BUY,
+            timestamp=datetime(2026, 1, 1, 9, 15),
+            reason="test",
+        )
+
+        order = build_order_from_signal(signal, quantity=10, price=2500.0)
+
+        self.assertIsNone(order.strike)
+        self.assertIsNone(order.expiry)
+        self.assertIsNone(order.option_type)
+        self.assertEqual(order.lot_size, 1)
+        self.assertIsNone(order.position_effect)
+
+    def test_options_signal_fields_are_threaded_through(self) -> None:
+        signal = TradeSignal(
+            strategy_name="test",
+            symbol="RELIANCE26AUG2600CE",
+            exchange="NFO",
+            side=SignalSide.SELL,
+            timestamp=datetime(2026, 1, 1, 9, 15),
+            reason="test",
+            strike=2600.0,
+            expiry="2026-08-27",
+            option_type=OptionType.CALL,
+            lot_size=250,
+            position_effect=PositionEffect.OPEN,
+        )
+
+        order = build_order_from_signal(signal, quantity=250, price=15.0)
+
+        self.assertEqual(order.strike, 2600.0)
+        self.assertEqual(order.expiry, "2026-08-27")
+        self.assertEqual(order.option_type, OptionType.CALL)
+        self.assertEqual(order.lot_size, 250)
+        self.assertEqual(order.position_effect, PositionEffect.OPEN)
+
+
+class BuildExitOrderShortAwareSideTests(unittest.TestCase):
+    def test_long_position_exit_is_sell_of_full_quantity(self) -> None:
+        decision = ExitDecision(
+            should_exit=True, symbol="RELIANCE", exchange="NSE", quantity=10, reason="stop_loss", exit_price=90.0
+        )
+
+        order = build_exit_order(decision, strategy_name="test")
+
+        self.assertEqual(order.side, OrderSide.SELL)
+        self.assertEqual(order.quantity, 10)
+
+    def test_short_position_exit_is_buy_to_cover_of_full_quantity(self) -> None:
+        decision = ExitDecision(
+            should_exit=True, symbol="RELIANCE26AUG2600CE", exchange="NFO", quantity=-250,
+            reason="stop_loss", exit_price=18.0,
+        )
+
+        order = build_exit_order(decision, strategy_name="test")
+
+        self.assertEqual(order.side, OrderSide.BUY)
+        self.assertEqual(order.quantity, 250)  # magnitude, not the signed tracked quantity
+
+
+class NakedWriteOpenOrchestratorTests(unittest.TestCase):
+    """
+    End-to-end proof that a SELL+OPEN signal registers a negative-quantity
+    tracked position, and that exits.py's short-aware stop/target math plus
+    build_exit_order's buy-to-cover side selection all interoperate.
+    """
+
+    def test_sell_to_open_then_price_rise_exits_via_buy_to_cover(self) -> None:
+        # Bar 0: sell-to-open at 100. Bar 1: price rises 10% -> for a
+        # short, that's a loss, so the 5% stop_loss must fire (mirror of
+        # the long case, where a *falling* price triggers the stop).
+        bars = make_price_bars([100.0, 110.0, 110.0])
+        orchestrator, broker = make_orchestrator(
+            bars, FakeRiskManager(approve=True), "sell_to_open_once", SellToOpenOnceStrategy
+        )
+        config = make_config(
+            "sell_to_open_once",
+            ["TEST"],
+            allocation_plan=make_allocation_plan(max_capital_per_trade=100.0),  # qty=1 at price=100
+            exit_policy=ExitPolicyConfig(stop_loss_pct=5.0),
+        )
+
+        result = orchestrator.run_session(config)
+
+        self.assertEqual(len(result.placed_orders), 1)
+        self.assertEqual(result.placed_orders[0].side, OrderSide.SELL)
+
+        self.assertEqual(len(result.exit_decisions), 1)
+        self.assertEqual(result.exit_decisions[0].reason, "stop_loss")
+        self.assertEqual(result.exit_decisions[0].quantity, -1)  # tracked as a negative (short) position
+
+        self.assertEqual(len(result.exit_orders), 1)
+        self.assertEqual(result.exit_orders[0].side, OrderSide.BUY)  # buy-to-cover, not sell
+        self.assertEqual(result.exit_orders[0].quantity, 1)
+
+        # Position closed: quantity back to zero after the buy-to-cover fill.
+        self.assertEqual(result.final_positions[0].quantity, 0)
+
+
+class NakedWriteMarginTrackingTests(unittest.TestCase):
+    """
+    A session's ``available_margin`` is fetched once (see
+    ``TradingSessionConfig.available_margin``'s docstring) but must still
+    reflect margin this same session already committed to an earlier
+    naked write - otherwise a second naked write is checked against the
+    same static figure the first one already consumed from.
+    """
+
+    def test_second_naked_write_in_session_is_rejected_once_cumulative_margin_exhausts_available(
+        self,
+    ) -> None:
+        # Two different underlyings so exposure/position guardrails never
+        # enter into it - this isolates the margin-tracking bug alone.
+        # EstimatedSpanMarginCalculator: required_margin = strike * qty * 0.20
+        # = 100 * 1 * 0.20 = 20.0 per naked write (qty=1 from
+        # max_capital_per_trade=100.0 at price=100.0).
+        bars = make_symbol_bars([("AAA", 100.0), ("BBB", 100.0)])
+        risk_manager = OptionsMarginRiskManager(
+            FakeRiskManager(approve=True), margin_calculator=EstimatedSpanMarginCalculator()
+        )
+        orchestrator, broker = make_orchestrator(
+            bars, risk_manager, "always_sell_to_open", AlwaysSellToOpenStrategy
+        )
+        config = make_config(
+            "always_sell_to_open",
+            ["AAA", "BBB"],
+            allocation_plan=make_allocation_plan(max_capital_per_trade=100.0),
+            available_margin=30.0,  # affords exactly one 20.0 write, not two
+        )
+
+        result = orchestrator.run_session(config)
+
+        self.assertEqual(len(result.placed_orders), 1)
+        self.assertEqual(result.placed_orders[0].symbol, "AAA")
+        self.assertEqual(result.rejected_signals, 1)
+
+    def test_naked_write_approved_when_cumulative_margin_still_fits(self) -> None:
+        # Same setup but available_margin=50.0 comfortably covers two
+        # 20.0 writes (40.0 total) - proves the fix doesn't over-reject.
+        bars = make_symbol_bars([("AAA", 100.0), ("BBB", 100.0)])
+        risk_manager = OptionsMarginRiskManager(
+            FakeRiskManager(approve=True), margin_calculator=EstimatedSpanMarginCalculator()
+        )
+        orchestrator, broker = make_orchestrator(
+            bars, risk_manager, "always_sell_to_open", AlwaysSellToOpenStrategy
+        )
+        config = make_config(
+            "always_sell_to_open",
+            ["AAA", "BBB"],
+            allocation_plan=make_allocation_plan(max_capital_per_trade=100.0),
+            available_margin=50.0,
+        )
+
+        result = orchestrator.run_session(config)
+
+        self.assertEqual(len(result.placed_orders), 2)
+        self.assertEqual(result.rejected_signals, 0)
+
+
+class OptionsSignalPricingTests(unittest.TestCase):
+    """
+    An options signal (option_type set) must be priced/sized off
+    signal.metadata["market_price"], never bar.close - see the
+    orchestrator's comment at the sizing_request/build_order_from_signal
+    call sites for why (only the underlying is subscribed pre-signal, so
+    bar.close is the underlying's spot price, not the option's).
+    """
+
+    def _make_config_with_params(
+        self, strategy_name: str, symbols: list[str], strategy_params: dict, allocation_plan
+    ) -> TradingSessionConfig:
+        return TradingSessionConfig(
+            trading_date=date(2026, 1, 1),
+            strategy_name=strategy_name,
+            strategy_params=strategy_params,
+            execution_mode="paper",
+            symbols=symbols,
+            portfolio_allocation_plan=allocation_plan,
+        )
+
+    def test_sizes_and_prices_off_metadata_market_price_not_bar_close(self) -> None:
+        # bar.close is 100.0 (see make_bars); market_price is deliberately
+        # very different (20.0, a plausible option premium vs. a much
+        # higher underlying spot) so the two can never be confused.
+        bars = make_bars(1)
+        orchestrator, broker = make_orchestrator(
+            bars, FakeRiskManager(approve=True), "options_signal", OnceOptionsSignalStrategy
+        )
+        # max_capital_per_trade=20.0 only affords qty=1 at price=20.0 (the
+        # metadata price) - at bar.close=100.0 it would afford qty=0,
+        # rejecting the signal entirely, so this also proves the price
+        # actually used by asserting a fill happens at all.
+        config = self._make_config_with_params(
+            "options_signal",
+            ["TEST"],
+            strategy_params={"market_price": 20.0},
+            allocation_plan=make_allocation_plan(max_capital_per_trade=20.0),
+        )
+
+        result = orchestrator.run_session(config)
+
+        self.assertEqual(result.rejected_signals, 0)
+        self.assertEqual(len(result.placed_orders), 1)
+        self.assertEqual(result.placed_orders[0].average_price, 20.0)
+
+    def test_missing_market_price_is_rejected_not_silently_priced_at_bar_close(self) -> None:
+        bars = make_bars(1)
+        orchestrator, broker = make_orchestrator(
+            bars, FakeRiskManager(approve=True), "options_signal", OnceOptionsSignalStrategy
+        )
+        config = self._make_config_with_params(
+            "options_signal",
+            ["TEST"],
+            strategy_params={},  # no "market_price" key at all
+            allocation_plan=make_allocation_plan(max_capital_per_trade=100.0),
+        )
+
+        result = orchestrator.run_session(config)
+
+        self.assertEqual(result.rejected_signals, 1)
+        self.assertEqual(len(result.placed_orders), 0)
+
+    def test_non_positive_market_price_is_rejected(self) -> None:
+        bars = make_bars(1)
+        orchestrator, broker = make_orchestrator(
+            bars, FakeRiskManager(approve=True), "options_signal", OnceOptionsSignalStrategy
+        )
+        config = self._make_config_with_params(
+            "options_signal",
+            ["TEST"],
+            strategy_params={"market_price": 0.0},
+            allocation_plan=make_allocation_plan(max_capital_per_trade=100.0),
+        )
+
+        result = orchestrator.run_session(config)
+
+        self.assertEqual(result.rejected_signals, 1)
+        self.assertEqual(len(result.placed_orders), 0)
+
+    def test_cash_equity_signal_still_prices_off_bar_close(self) -> None:
+        # Regression guard: the fix must not touch the far more common
+        # cash-equity path at all.
+        bars = make_bars(1)  # bar.close = 100.0
+        orchestrator, broker = make_orchestrator(
+            bars, FakeRiskManager(approve=True), "always_buy", AlwaysBuyStrategy
+        )
+        config = make_config(
+            "always_buy", ["TEST"], allocation_plan=make_allocation_plan(max_capital_per_trade=100.0)
+        )
+
+        result = orchestrator.run_session(config)
+
+        self.assertEqual(len(result.placed_orders), 1)
+        self.assertEqual(result.placed_orders[0].average_price, 100.0)
 
 
 if __name__ == "__main__":

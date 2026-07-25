@@ -24,6 +24,25 @@ class TradingSessionConfig:
     is not configured here: it is derived per-signal by the
     ``PositionSizingEngine`` from ``portfolio_allocation_plan`` and the
     triggering bar's price.
+
+    ``available_margin`` is the broker-reported available margin,
+    fetched once at session start (not per-order - see
+    ``core/broker/margin.py``) - ``None`` unless an options session
+    actually needs a margin-aware risk manager
+    (``core.risk.options_margin.OptionsMarginRiskManager``). A
+    deliberate V1 approximation: a per-order fetch would hammer the
+    margin endpoint. This session's own naked-write fills are not part
+    of that approximation - ``SignalPipeline`` tracks a running
+    ``used_margin`` (mirroring ``used_intraday_capital``) and nets it
+    out of this figure before every margin check, so only margin drift
+    truly external to this session (other sessions, other strategies,
+    manual trades elsewhere) goes unaccounted for.
+
+    ``broker_algo_tag`` is SEBI's exchange-issued algo/strategy id for
+    this session's broker (see ``apps/live_trader/config.py``'s
+    ``LIVE_BROKER_ALGO_ID``), stamped onto every order this session
+    places - ``None`` for a paper session, which places no real exchange
+    order.
     """
 
     trading_date: date
@@ -34,6 +53,8 @@ class TradingSessionConfig:
     portfolio_allocation_plan: PortfolioAllocationPlan
     exit_policy: ExitPolicyConfig | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    available_margin: float | None = None
+    broker_algo_tag: str | None = None
 
 
 @dataclass(slots=True)
