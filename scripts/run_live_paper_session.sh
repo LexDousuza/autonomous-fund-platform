@@ -11,6 +11,12 @@
 #   4. Add a crontab entry (see docs/runbooks/daily_paper_trading.md).
 set -euo pipefail
 
+# Without this, stdout is fully buffered once redirected to a file (not a
+# TTY) - the startup banner and any print() output sits unflushed for the
+# life of the process, so `tail -f`/the dashboard show nothing until it
+# exits. Applies to every python invocation below, not just live_trader.
+export PYTHONUNBUFFERED=1
+
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_DIR"
 
@@ -54,16 +60,22 @@ if [ -n "${OBSIDIAN_VAULT_PATH:-}" ]; then
 fi
 
 export LIVE_BROKER_PROVIDER=paper
-# Defaults to groww; override (e.g. `LIVE_MARKET_DATA_PROVIDER=kite
-# ./scripts/run_live_paper_session.sh`) to run against Kite's live quotes
-# instead - both are paper-fills-only, zero capital at risk either way.
-export LIVE_MARKET_DATA_PROVIDER="${LIVE_MARKET_DATA_PROVIDER:-groww}"
+# Angel One is the standing live-quote source (LTP-polling, no volume/real
+# trade-timestamp - see core/market_data/angelone_live_feed.py); override
+# with `LIVE_MARKET_DATA_PROVIDER=groww` or `=kite` to use one of those
+# instead - all three are paper-fills-only, zero capital at risk either way.
+export LIVE_MARKET_DATA_PROVIDER="${LIVE_MARKET_DATA_PROVIDER:-angelone}"
 export LIVE_MAX_BARS="${LIVE_MAX_BARS:-4500}"
 export LIVE_CONFIRM=I_UNDERSTAND_THIS_CAN_PLACE_REAL_ORDERS
 
 echo "=== starting live paper session at $(date) ===" >> "$LOG_FILE"
 set +e  # a failed session must still fall through to the trailer log line below
-"$REPO_DIR/.venv/bin/python" -m apps.live_trader.main >> "$LOG_FILE" 2>&1
+# caffeinate -i: holds an idle-sleep assertion for this process's lifetime,
+# so the Mac can't nod off mid-session (this runs ~4500 poll cycles across
+# a full trading day) even if the lid gets closed after cron starts it -
+# see docs/runbooks/daily_paper_trading.md's cron-reliability note for why
+# this is needed at all.
+caffeinate -i "$REPO_DIR/.venv/bin/python" -m apps.live_trader.main >> "$LOG_FILE" 2>&1
 exit_code=$?
 set -e
 echo "=== session ended at $(date), exit code $exit_code ===" >> "$LOG_FILE"

@@ -15,23 +15,45 @@ capital at risk, no manual steps once set up.
    (strongly recommended) `ALERT_WEBHOOK_URL` - this is unattended, so a
    webhook is the only way you'll find out something went wrong without
    checking logs by hand. `.env.live_trader` is gitignored; never commit it.
-3. Confirm the wrapper script is executable:
+3. Confirm both wrapper scripts are executable:
    ```
-   chmod +x scripts/run_live_paper_session.sh
+   chmod +x scripts/run_live_paper_session.sh scripts/run_overnight_selection.sh
    ```
-4. Test it manually once, outside cron, before scheduling it:
+4. Test each manually once, outside cron, before scheduling either:
+   ```
+   ./scripts/run_overnight_selection.sh
+   ```
+   Check `data/cron_logs/overnight_selection_<today>.log` for a
+   `=== OVERNIGHT CANDIDATE SELECTION ===` summary and a
+   `Saved to data/candidate_selection/<next-trading-date>.json` line -
+   this can take a while (see the cron step below for why).
    ```
    ./scripts/run_live_paper_session.sh
    ```
    Let it run a few minutes (during market hours), then Ctrl-C, and check
    `data/cron_logs/live_paper_<today>.log` for a clean startup banner
    (`Broker: paper/paper`, `Market data: groww/live`, `Reconciliation: clean`).
-5. Add the cron entry - `crontab -e`, then add this line (this machine's
-   local timezone is already IST, so no timezone conversion needed):
+5. Add **two** cron entries - `crontab -e`, then add these lines (this
+   machine's local timezone is already IST, so no timezone conversion
+   needed):
    ```
-   14 9 * * 1-5 /Users/neel/Claude/Project/autonomous-fund-platform/scripts/run_live_paper_session.sh
+   0 20 * * 0-4 /Users/neel/Claude/Project/autonomous-fund-platform/scripts/run_overnight_selection.sh
+   0 9 * * 1-5 /Users/neel/Claude/Project/autonomous-fund-platform/scripts/run_live_paper_session.sh
    ```
-   Fires at 9:14 AM, Monday-Friday - a minute before NSE open.
+   The first runs candidate selection (Angel One prescreen + historical
+   fetch + bucket selection - can take an hour+ against the full NSE
+   universe, see `core/market_data/candidate_prescreen.py`) at 8 PM
+   Sun-Thu, for the *next* trading day - so it's done well before market
+   open, not eating into the trading day. The second is trading itself,
+   at 9 AM Mon-Fri: it reads that overnight result automatically if
+   present for today and skips straight to it (see
+   `core/market_data/candidate_selection_store.py`); if the overnight
+   job didn't run (first setup, or it failed), it just falls back to
+   selecting live - slower, but never blocks trading from starting.
+
+   Both scripts share `.env.live_trader` and `LIVE_MARKET_DATA_PROVIDER`
+   - keep them consistent, or the overnight job's selection won't be for
+   the provider the morning job actually trades against.
 
    **macOS gotcha:** cron often needs Full Disk Access to reliably read
    files outside its own sandbox. If scheduled runs silently don't
@@ -39,13 +61,51 @@ capital at risk, no manual steps once set up.
    Full Disk Access and add `/usr/sbin/cron` (or grant it to your
    terminal app if cron itself isn't listed).
 
+   **The bigger macOS gotcha (confirmed the cause of missed runs
+   2026-07-27 through 2026-07-31): cron cannot wake a sleeping Mac.** If
+   the lid is closed or the machine is just idle at the scheduled minute,
+   the firing is silently skipped - no error, no log file, nothing
+   in `mail` you'd actually notice; on those dates `pmset -g log` showed
+   the Mac asleep straight through 09:00 or 20:00, waking minutes later
+   for an unrelated background maintenance blip. Both cron scripts now
+   wrap their main work in `caffeinate -i` so a run already in progress
+   can't be interrupted by sleep, but that doesn't help if the Mac was
+   already asleep *at* 08:58 when cron tried to start it in the first
+   place. Fix that with a scheduled wake a couple minutes early:
+   ```
+   sudo pmset repeat wake MTWRFSU 08:58:00
+   ```
+   `pmset repeat` only holds one daily wake time, so this covers the
+   09:00 trading job, not the 20:00 overnight-selection one - that's the
+   right tradeoff, not a compromise: overnight selection missing is
+   already designed to be harmless (the daily-operation section above -
+   "if the overnight job didn't run... it just falls back to selecting
+   live"), while missing the trading job entirely skips a day. If you
+   want the 20:00 job reliable too, just leave the lid open some evenings
+   or add a second, separately-scripted `pmset schedule wake` (a one-shot
+   command that needs re-issuing daily, unlike `repeat`) - not set up
+   here. `sudo pmset -g sched` shows what's currently scheduled;
+   `sudo pmset repeat cancel` clears it.
+
 ## Daily operation (once set up, this is automatic)
+
+Each evening (Sun-Thu), cron fires `run_overnight_selection.sh`, which:
+1. Loads credentials from `.env.live_trader`.
+2. Sets `config/mandates/sample_mandate.yaml`'s `trading_date` to the
+   *next* trading day (skips weekends).
+3. Runs `apps.live_trader.select_candidates_main`, logging to
+   `data/cron_logs/overnight_selection_<date>.log`, and saves the result
+   to `data/candidate_selection/<next-trading-date>.json`.
+4. Fires an alert on failure - a missed/failed overnight run just means
+   tomorrow's trading job selects live instead (slower, not broken).
 
 Each trading morning, cron fires `run_live_paper_session.sh`, which:
 1. Loads credentials from `.env.live_trader`.
 2. Sets `config/mandates/sample_mandate.yaml`'s `trading_date` to today.
 3. Runs `apps.live_trader.main` for ~4500 poll cycles (a full trading day),
-   logging to `data/cron_logs/live_paper_<date>.log`.
+   logging to `data/cron_logs/live_paper_<date>.log` - using last night's
+   precomputed candidate selection if one was saved for today, or
+   selecting live if not.
 4. Fires an alert (console + `data/alerts.log` + webhook if configured) on
    any failure, and on a session that completed but skipped bars due to
    errors.
@@ -58,6 +118,50 @@ Each trading morning, cron fires `run_live_paper_session.sh`, which:
 - **Alerts**: `cat data/alerts.log`
 - **Full session record**: `data/live_sessions/<session_id>/session.json`
   and `events.jsonl`.
+
+## Reaching the dashboard from your phone (or anywhere else)
+
+By default the dashboard binds to `127.0.0.1` with no login - fine for
+the same machine, or the SSH-tunnel setup in step 7 below from your own
+laptop. Neither of those works from a phone away from home, and the
+dashboard has POST endpoints (`/add-symbol`, `/update-mandate`) that
+change live capital/risk settings, so a public URL needs a real login in
+front of it first - this isn't optional.
+
+1. **Set a token.** Add a long random secret to `.env.live_trader`:
+   ```
+   DASHBOARD_AUTH_TOKEN=$(python3 -c "import secrets; print(secrets.token_urlsafe(24))")
+   ```
+   Every request now needs this as an HTTP Basic auth password (any
+   username - it's one shared secret, not per-user accounts). Your
+   phone's browser will just show the normal native login prompt.
+
+2. **Put a public HTTPS tunnel in front of it** - simplest is
+   [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/do-more-with-tunnels/trycloudflare/),
+   which needs no account, no domain, and no inbound firewall port (it's
+   an outbound connection from wherever the dashboard runs, so this works
+   identically whether that's your laptop or the EC2 box from step 7):
+   ```
+   brew install cloudflared   # or the equivalent for your OS
+   cloudflared tunnel --url http://127.0.0.1:8765
+   ```
+   This prints a `https://<random-name>.trycloudflare.com` URL - open
+   that from your phone, anywhere, and you'll get the login prompt from
+   step 1. The dashboard itself still only needs to bind to
+   `127.0.0.1:8765` as usual (`DASHBOARD_HOST` doesn't need changing) -
+   `cloudflared` is what's actually reachable from outside, and it's
+   talking to the dashboard over loopback on the same machine.
+
+   A free-tier quick tunnel like this gets a new random URL each time you
+   start it. If you want a stable, memorable address instead, that needs
+   a (still free) Cloudflare account and a named tunnel - more setup, not
+   covered here.
+
+3. **Skip the tunnel and expose the port directly instead?** You can
+   (`DASHBOARD_HOST=0.0.0.0`, then open the port in your firewall/router)
+   but you're then relying on the token alone against the entire
+   internet scanning that port, with no rate-limiting or IP allowlisting
+   - the tunnel path above is the one actually recommended.
 
 ## If something goes wrong mid-day
 
