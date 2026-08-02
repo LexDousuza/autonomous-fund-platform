@@ -1,0 +1,88 @@
+id: EXP-0003
+
+hypothesis: >
+  vertical_credit_spread (NIFTY, PUT side) converts the measured VRP
+  (EXP-0001) into real, risk-defined strategy PnL once execution mechanics
+  (sizing, two-leg hedge, margin, transaction costs) are in the loop.
+
+economic_mechanism: >
+  Same underlying premium as EXP-0001, harvested via a short-strike +
+  further-OTM protective long strike (risk-defined, not naked) whenever the
+  chain's own ATM IV sits meaningfully above this strategy's realized-vol
+  estimate (iv_rv_ratio_threshold).
+
+dataset: data/processed/nse_index_options_iv_history.csv
+universe: [NIFTY]
+period:
+  # Phase 1 only had the 2024-2026 window (labeled train_or_dev below at
+  # the time, no split existed yet). Phase 2 added an earlier dev window
+  # and re-labeled the original window as holdout, matching every other
+  # entry's convention.
+  train_or_dev: "2016-01-01 to 2023-12-31 (Phase 2 dev split, 317 trades): point=1.1620, CI=[0.8715,1.5817], p=0.4045 - fails"
+  holdout: "2024-01-01 to 2026-07-24 (630 trading days, 137 trades): point=1.0652, CI=[0.6330,1.7875], p=0.829 - fails"
+
+parameters:
+  option_type: PUT
+  expiry_horizon_days: 7
+  short_leg_target_delta: 0.25
+  wing_offset_strikes: 2
+  iv_rv_ratio_threshold: 1.2
+  min_net_credit_pct_of_width: 10.0
+  historical_vol_lookback_bars: 20
+  max_holding_days: 5
+  capital: 5000000.0
+  per_leg_capital: 10000.0
+  lot_size: 75
+  slippage_bps: 5.0
+
+bootstrap_ci:
+  point_estimate: 1.0651534350305658   # profit factor; 137 closed leg round-trips
+  lower: 0.6330351543086714
+  upper: 1.7874800841963654
+  n_resamples: 2000
+p_value: 0.829
+fdr_corrected: false   # Benjamini-Hochberg across all 10 experiments with a computed p-value, fdr=0.05
+kill_criteria_result:
+  ci_lower_bound_above_1: false
+  fdr_p_under_threshold: false
+  holdout_drop_under_25pct: true   # holdout PF (1.065) vs dev PF (1.162): ~8.3% drop, under 25% - moot given the other two criteria already fail
+  walk_forward_sign_consistent: false   # 0/16 year-windows (8 years x 2 symbols) reach significance; point estimates lean >1 in 6/8 years but never with power to confirm - see reason
+
+git_commit: b32f494a980aa65e74b7e5753caa8dae3237e725
+config_version: config/strategies/vertical_credit_spread.yaml
+data_snapshot_id: sha256:e5781844a58c6f81b1d594ca5d695a2f94ee8c79a373fc80a8c1dacd9badba6b
+python_version: "3.14.2"
+random_seed: 0
+
+date_opened: 2026-07-28
+date_decided: 2026-07-28
+decision: fail
+reason: >
+  Phase 1: bootstrap CI on profit factor [0.63, 1.79] straddles 1.0, p=0.829
+  on 137 trades - not significant. Phase 2
+  (docs/research/validation_audit_phase2.md) tested far more broadly: dev
+  window, 8 walk-forward years, both IV regimes, and 9 parameter values for
+  short_leg_target_delta/iv_rv_ratio_threshold each (18 runs total across
+  both symbols) - ZERO of these reach significance either. The parameter
+  surface is smooth (no spike anywhere in [0.15,0.35]/[1.0,1.5]), ruling out
+  "the defaults got unlucky." Nuance worth keeping: point estimates lean
+  >1 in 6 of 8 walk-forward years (up to 1.43), so this reads as
+  underpowered/possibly cost-capped rather than reliably losing - different
+  shape from EXP-0008 through EXP-0012's confirmed losers. Open question
+  Phase 2 flagged but can't resolve: is this the execution design (this
+  audit's working assumption) or an implementation bug in
+  core/strategy/credit_spread.py suppressing a real edge uniformly? Not
+  ruled out - recommend a code review before further strategy-design work.
+
+  RESOLVED (2026-07-31, see validation_audit_phase2.md's 2026-07-31
+  addendum): the flagged skew bug (flat ATM IV fed into every contract's
+  delta instead of each contract's own IV) is real and fixed, but fixing
+  it alone doesn't change the result at the original 5-day hold (PF 1.010
+  post-fix vs 1.065 pre-fix on the same window - within noise for ~140
+  trades). Implementation bug ruled out as the cause. A separate,
+  unbootstrapped exploratory check found NIFTY's point estimate rising
+  with longer max_holding_days (1.010 @5d -> 1.112 @10d, still >1 @15d)
+  while BANKNIFTY does not show the same pattern - an open lead, not a
+  validated one; would need the full Phase 2 battery at whatever hold
+  length before it means anything.
+  Should not proceed to Tier B as currently designed.

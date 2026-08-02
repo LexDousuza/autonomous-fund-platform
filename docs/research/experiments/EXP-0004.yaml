@@ -1,0 +1,72 @@
+id: EXP-0004
+
+hypothesis: >
+  vertical_credit_spread (BANKNIFTY, PUT side) converts the measured VRP
+  (EXP-0002) into real, risk-defined strategy PnL once execution mechanics
+  are in the loop.
+
+economic_mechanism: >
+  Same as EXP-0003 (NIFTY), applied to BANKNIFTY's own measured premium
+  (EXP-0002).
+
+dataset: data/processed/nse_index_options_iv_history.csv
+universe: [BANKNIFTY]
+period:
+  train_or_dev: "2016-01-01 to 2023-12-31 (Phase 2 dev split, 403 trades): point=1.0233, CI=[0.7619,1.3910], p=0.897 - fails"
+  holdout: "2024-01-01 to 2026-07-24 (630 trading days, 73 trades): point=0.8131, CI=[0.3917,1.7012], p=0.6435 - fails"
+
+parameters:
+  option_type: PUT
+  expiry_horizon_days: 7
+  short_leg_target_delta: 0.25
+  wing_offset_strikes: 2
+  iv_rv_ratio_threshold: 1.2
+  min_net_credit_pct_of_width: 10.0
+  historical_vol_lookback_bars: 20
+  max_holding_days: 5
+  capital: 5000000.0
+  per_leg_capital: 10000.0
+  lot_size: 75
+  slippage_bps: 5.0
+
+bootstrap_ci:
+  point_estimate: 0.8130767508829778   # profit factor; 73 closed leg round-trips
+  lower: 0.39173634900448506
+  upper: 1.7011612375680003
+  n_resamples: 2000
+p_value: 0.6435
+fdr_corrected: false   # Benjamini-Hochberg across all 10 experiments with a computed p-value, fdr=0.05
+kill_criteria_result:
+  ci_lower_bound_above_1: false
+  fdr_p_under_threshold: false
+  holdout_drop_under_25pct: true   # holdout PF (0.813) vs dev PF (1.023): ~20.5% drop, under 25% - moot given the other two criteria already fail
+  walk_forward_sign_consistent: false   # 0/16 year-windows reach significance; point estimates lean >1 in 6/8 years - see reason
+
+git_commit: b32f494a980aa65e74b7e5753caa8dae3237e725
+config_version: config/strategies/vertical_credit_spread.yaml
+data_snapshot_id: sha256:e5781844a58c6f81b1d594ca5d695a2f94ee8c79a373fc80a8c1dacd9badba6b
+python_version: "3.14.2"
+random_seed: 0
+
+date_opened: 2026-07-28
+date_decided: 2026-07-28
+decision: fail
+reason: >
+  Phase 1: CI [0.39, 1.70], p=0.6435 on 73 trades - not significant. Phase 2
+  (docs/research/validation_audit_phase2.md): same exhaustive battery as
+  EXP-0003 (dev, 8 walk-forward years, both regimes, 9 parameter values x 2
+  = 18 runs total shared across both symbols) - zero significant results.
+  Point estimates lean >1 in 6 of 8 walk-forward years (up to 1.24), same
+  underpowered-not-losing shape as NIFTY. Same open question as EXP-0003
+  (execution design vs. possible implementation bug) - unresolved, flagged
+  for a code review before further work.
+
+  RESOLVED (2026-07-31, see EXP-0003 and validation_audit_phase2.md's
+  2026-07-31 addendum): skew bug fixed, doesn't change the result at 5-day
+  hold. Unlike NIFTY, BANKNIFTY's exploratory point estimate does NOT rise
+  with longer max_holding_days - peaks at 7d (0.940), still below 1, and
+  drops further at 10d (0.831). No hold-length lead here worth pursuing on
+  this evidence.
+
+  Should not proceed to Tier B as
+  currently designed.
