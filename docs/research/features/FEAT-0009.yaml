@@ -1,0 +1,47 @@
+id: FEAT-0009
+feature: realized_volatility
+hypothesis: >
+  A stock's trailing 20-day annualized realized volatility predicts its
+  forward 5-day return.
+economic_mechanism: >
+  The low-volatility anomaly (Ang et al.'s idiosyncratic-volatility
+  puzzle) - low-realized-vol stocks have historically shown better
+  risk-adjusted forward returns than high-vol ones.
+question_2_redundancy_check: >
+  Distinct from atr_pct (FEAT-0004): both measure "how much does this
+  stock move" but realized_volatility is a symmetric close-to-close
+  dispersion measure, atr_pct is a range measure sensitive to gaps and
+  intrabar excursions - the two can diverge on gappy vs. smoothly
+  trending names. Tested side by side specifically to see if they
+  disagree, not assumed redundant just because they're correlated.
+
+methodology: cross-sectional daily IC, 122-symbol universe (real NSE corporate-actions table applied - see FEAT-0001)
+dataset: data/processed/nse_daily_12mo.csv
+period: 2025-07 to 2026-07 (~12 months)
+parameters: {lookback_days: 20, forward_horizon_days: 5}
+
+bootstrap_ci:
+  point_estimate: 0.0104
+  lower: -0.0081
+  upper: 0.0298
+  n_resamples: 2000
+p_value: 0.377
+fdr_corrected: false   # Benjamini-Hochberg across all 11 Phase A features, fdr=0.05
+n_observations: 221
+
+git_commit: b32f494a980aa65e74b7e5753caa8dae3237e725
+data_snapshot_id: null
+python_version: "3.14.2"
+random_seed: 0
+
+date_opened: 2026-07-30
+date_decided: 2026-07-30
+decision: fail
+reason: >
+  Weak positive IC (0.010), CI straddles zero, p=0.377 - the weakest
+  volatility-family result in the batch (atr_pct, FEAT-0004, at least got
+  to p=0.22). No evidence of the low-volatility anomaly on this
+  universe/window - could be a real absence, could be the anomaly needing
+  a longer history (it's traditionally measured over years, not 12
+  months) or risk-adjustment this test doesn't do (raw forward return,
+  not Sharpe-style).

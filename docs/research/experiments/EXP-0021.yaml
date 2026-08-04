@@ -1,0 +1,75 @@
+id: EXP-0021
+
+hypothesis: >
+  vertical_credit_spread (NIFTY, PUT side) converts the measured VRP
+  (EXP-0001) into real, risk-defined strategy PnL once execution mechanics
+  are in the loop, IF given a longer max holding period than EXP-0003's
+  5-day cap - per validation_audit_phase2.md's 2026-07-31 exploratory
+  follow-up, which found NIFTY's point estimate rising with hold length
+  (1.010 @5d -> 1.112 @10d) in a single, unbootstrapped 630-day window.
+
+economic_mechanism: >
+  Same as EXP-0003: option sellers demand compensation for tail/gap risk,
+  harvested via a risk-defined vertical spread. This entry specifically
+  tests whether a 10-day hold (vs. EXP-0003's 5-day) captures more of the
+  theta decay that concentrates in an option's final days before expiry -
+  the mechanism flagged, not verified, in validation_audit_phase2.md's
+  2026-07-29 code-review addendum.
+
+dataset: data/processed/nse_index_options_iv_history.csv
+universe: [NIFTY]
+period:
+  train_or_dev: "2016-01-01 to 2023-12-31 (214 trades): point=1.2831, CI=[0.9040,1.8930], p=0.265 - fails"
+  holdout: "2024-01-01 to 2026-07-24 (84 trades): point=1.1122, CI=[0.5757,2.1023], p=0.7955 - fails"
+
+parameters:
+  option_type: PUT
+  expiry_horizon_days: 7
+  short_leg_target_delta: 0.25
+  wing_offset_strikes: 2
+  iv_rv_ratio_threshold: 1.2
+  min_net_credit_pct_of_width: 10.0
+  historical_vol_lookback_bars: 20
+  max_holding_days: 10
+  capital: 5000000.0
+  per_leg_capital: 10000.0
+  lot_size: 75
+  slippage_bps: 5.0
+
+bootstrap_ci:
+  point_estimate: 1.1121647453447048   # profit factor; 84 closed leg round-trips, HOLDOUT window
+  lower: 0.575674411335705
+  upper: 2.102305030952729
+  n_resamples: 2000
+p_value: 0.7955
+fdr_corrected: false   # not run alongside a broader FDR batch this round - see reason
+kill_criteria_result:
+  ci_lower_bound_above_1: false
+  fdr_p_under_threshold: false
+  holdout_drop_under_25pct: true   # holdout PF (1.112) vs dev PF (1.283): 13.3% drop, under 25%
+  walk_forward_sign_consistent: false   # 0/8 walk-forward years (2018-2025) reach significance; 7/8 point estimates >1 (up to 1.801 in 2023) but never with power to confirm
+
+git_commit: 7507cb254900f4f6106823bc6b02c06308d77c51
+config_version: config/strategies/vertical_credit_spread.yaml
+data_snapshot_id: sha256:e5781844a58c6f81b1d594ca5d695a2f94ee8c79a373fc80a8c1dacd9badba6b
+python_version: "3.14.2"
+random_seed: 0
+
+date_opened: 2026-08-03
+date_decided: 2026-08-03
+decision: fail
+reason: >
+  docs/research/validation_audit_phase2_longer_hold.md: full Phase 2 battery
+  (dev, holdout, 8 walk-forward years, both IV regimes) re-run at a 10-day
+  max hold, per EXP-0003's own recommendation to test the longer-hold lead
+  properly rather than on a single unbootstrapped window. Result: still
+  zero of 12 checks (dev + holdout + 8 WF + 2 regime) reach significance -
+  same shape as EXP-0003's 5-day result. Point estimates did rise vs. 5d
+  (dev 1.162 -> 1.283; holdout 1.065 -> 1.112) and 7/8 walk-forward years
+  lean >1, but sample size fell in the same direction (dev trades: 317 ->
+  214) so the CI did not tighten. Longer hold is not (yet) the fix for
+  credit_spread's underpowered result on NIFTY. See EXP-0022 for the same
+  test at 15 days, and EXP-0023/EXP-0024 for BANKNIFTY, which shows a
+  materially different (worse) pattern.
+
+  Should not proceed to Tier B as currently designed.

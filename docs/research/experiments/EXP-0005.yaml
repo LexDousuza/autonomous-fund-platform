@@ -1,0 +1,47 @@
+id: EXP-0005
+
+hypothesis: >
+  A single option contract's own price deviates from Black-Scholes fair
+  value by more than transaction costs justify (options_mispricing,
+  distinct from vertical_credit_spread's broader "IV level is rich"
+  hypothesis - see docs/strategy-specs/options_mispricing.md).
+
+economic_mechanism: null   # documented in the strategy spec; not re-derived here since this entry can't proceed past infra status anyway
+
+dataset: null
+universe: null
+period:
+  train_or_dev: null
+  holdout: null
+parameters: {}
+
+bootstrap_ci: {point_estimate: null, lower: null, upper: null, n_resamples: null}
+p_value: null
+fdr_corrected: null
+kill_criteria_result:
+  ci_lower_bound_above_1: null
+  fdr_p_under_threshold: null
+  holdout_drop_under_25pct: null
+  walk_forward_sign_consistent: null
+
+git_commit: b32f494a980aa65e74b7e5753caa8dae3237e725
+config_version: config/strategies/options_mispricing.yaml
+data_snapshot_id: null
+python_version: "3.14.2"
+random_seed: null
+
+date_opened: 2026-07-28
+date_decided: 2026-07-28
+decision: archived
+reason: >
+  needs_dedicated_backtest_harness. Requires an injected option_chain_provider
+  (same as vertical_credit_spread), but unlike credit_spread - which got its
+  own scripts/backtest_credit_spread_multi_day.py specifically to enable
+  this - no equivalent script exists for options_mispricing, and it is not
+  registered in apps/backtester/run_backtest.py's generic strategy set
+  (confirmed: the only appearance of "options_mispricing" in that file is a
+  comment, not an import/registration). This strategy has never been
+  backtested against real data. Building that harness is new engineering
+  work, not a re-audit of an existing claim - out of Phase 1's scope
+  (re-audit what's already been tested), candidate for its own follow-up
+  once Phase 1-4 are through.

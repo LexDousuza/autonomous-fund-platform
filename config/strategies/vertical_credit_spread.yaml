@@ -1,0 +1,37 @@
+strategy:
+  name: vertical_credit_spread
+
+# NOTE: `option_chain_provider` is not set here - not a YAML-serializable
+# primitive (see core/strategy/credit_spread.py's docstring). Whatever
+# builds this strategy's StrategyContext must inject an object with
+# get_chain(underlying_symbol, exchange, expiry_horizon_days, spot) into
+# params["option_chain_provider"] itself; if omitted, the strategy
+# quietly abstains (no signal) rather than failing.
+#
+# allow_naked_writing here is this strategy's OWN opt-in - it stacks
+# with (never substitutes for) the global OPTIONS_WRITING_CONFIRM safety
+# gate in apps/live_trader/config.py, exactly like options_mispricing's
+# identical flag. Required because the short leg is mechanically a naked
+# write to every other part of this platform - see this strategy's
+# docstring's de-hedge-risk section for why.
+#
+# option_type is static per instance - run a second copy of this file
+# with option_type: "CALL" to also trade the call side.
+params:
+  option_type: "PUT"
+  expiry_horizon_days: 7
+  short_leg_target_delta: 0.25
+  wing_offset_strikes: 2
+  iv_rv_ratio_threshold: 1.2
+  min_net_credit_pct_of_width: 10.0
+  historical_vol_lookback_bars: 20
+  risk_free_rate: 0.07
+  min_open_interest: 0.0
+  allow_naked_writing: false
+
+# Selects the fixed NIFTY/BANKNIFTY universe (config/instruments/india_index_universe.yaml)
+# and skips the cash-equity prescreen/historical-fetch/bucket-selection
+# pipeline entirely - see CandidateProfile.fixed_universe_segment's
+# docstring.
+candidate_profile:
+  fixed_universe_segment: "INDEX"

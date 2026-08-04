@@ -1,0 +1,33 @@
+id: EXP-0009
+hypothesis: Deviation from session VWAP mean-reverts.
+economic_mechanism: >
+  Intraday price extensions meaningfully below the session's volume-weighted
+  average price (VWAP) are hypothesized to be short-term liquidity-driven
+  overreactions rather than new information, expected to revert back toward
+  VWAP as normal volume-weighted execution flow continues through the
+  session - a fixed-percentage-deviation version of the same reversion idea
+  `ornstein_uhlenbeck` later tested with a fitted stochastic model instead.
+  No dedicated spec doc exists for this strategy; mechanism reconstructed
+  from `core/strategy/vwap_reversion.py`'s own docstring.
+
+dataset: data/processed/nse_5min_dev.csv
+period: {train_or_dev: "nse_5min_dev.csv, 123 trading days", holdout: null}
+parameters: {min_bars_for_vwap: 6, min_deviation_pct: 0.4}
+
+bootstrap_ci: {point_estimate: 0.3251611375164331, lower: 0.24004457449475208, upper: 0.42783188873656747, n_resamples: 2000}
+p_value: 0.0
+fdr_corrected: true   # significant, but CI is below 1 (a confirmed loss, not a confirmed edge) - see reason below
+kill_criteria_result: {ci_lower_bound_above_1: false, fdr_p_under_threshold: true, holdout_drop_under_25pct: null, walk_forward_sign_consistent: null}
+
+git_commit: b32f494a980aa65e74b7e5753caa8dae3237e725
+config_version: config/strategies/vwap_reversion.yaml
+data_snapshot_id: sha256:a172d0e259f144091bda8b63db988e755a97fb2245c7a9cb9a73dce1825f8177
+python_version: "3.14.2"
+random_seed: 0
+
+date_opened: 2026-07-28
+date_decided: 2026-07-28
+decision: fail
+reason: >
+  353 trades, CI [0.24, 0.43] entirely below 1, p=0.0000 - significant loss,
+  same pattern as EXP-0008.

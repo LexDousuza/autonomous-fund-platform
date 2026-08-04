@@ -1,0 +1,45 @@
+id: EXP-0006
+
+hypothesis: >
+  News sentiment (headline scoring against a symbol's own name/query
+  template) predicts near-term direction.
+
+economic_mechanism: null
+
+dataset: null
+universe: null
+period:
+  train_or_dev: null
+  holdout: null
+parameters: {}
+
+bootstrap_ci: {point_estimate: null, lower: null, upper: null, n_resamples: null}
+p_value: null
+fdr_corrected: null
+kill_criteria_result:
+  ci_lower_bound_above_1: null
+  fdr_p_under_threshold: null
+  holdout_drop_under_25pct: null
+  walk_forward_sign_consistent: null
+
+git_commit: b32f494a980aa65e74b7e5753caa8dae3237e725
+config_version: config/strategies/news_sentiment_signal.yaml
+data_snapshot_id: null
+python_version: "3.14.2"
+random_seed: null
+
+date_opened: 2026-07-28
+date_decided: 2026-07-28
+decision: archived
+reason: >
+  needs_historical_data. This strategy's params["news_feed"], if not
+  injected, falls back to constructing a real, LIVE core.news.google_news_feed.GoogleNewsFeed
+  (confirmed in config/strategies/news_sentiment_signal.yaml's own
+  comment) - there is no historical news archive wired into this
+  codebase. Running it through a historical backtest without one would
+  either fail outright or silently fetch TODAY's news regardless of the
+  simulated historical date, which is both non-reproducible and a
+  look-ahead-bias risk, not a real backtest. Cannot be meaningfully
+  re-audited until historical news data exists - archived, not failed
+  (failure implies a real result that didn't hold up; this strategy has
+  never produced a real one to fail).

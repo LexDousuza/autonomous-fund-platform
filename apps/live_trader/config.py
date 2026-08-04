@@ -15,8 +15,25 @@ from datetime import date, timedelta
 LIVE_CONFIRM_ENV_VAR = "LIVE_CONFIRM"
 LIVE_CONFIRM_REQUIRED_VALUE = "I_UNDERSTAND_THIS_CAN_PLACE_REAL_ORDERS"
 
+# A second, independent safety gate for naked option writing (uncapped
+# risk) - deliberately a *different* exact string than LIVE_CONFIRM so
+# the two decisions ("place real orders at all" vs. "allow uncapped-risk
+# naked writes") can never be fat-fingered/confirmed together by copying
+# one value into the other.
+OPTIONS_WRITING_CONFIRM_ENV_VAR = "OPTIONS_WRITING_CONFIRM"
+OPTIONS_WRITING_CONFIRM_REQUIRED_VALUE = "I_UNDERSTAND_NAKED_OPTION_WRITING_HAS_UNCAPPED_RISK"
+
 _SUPPORTED_BROKER_PROVIDERS = {"paper", "groww", "kite"}
-_SUPPORTED_MARKET_DATA_PROVIDERS = {"memory", "groww", "kite"}
+_SUPPORTED_MARKET_DATA_PROVIDERS = {"memory", "groww", "kite", "angelone"}
+
+# Angel One's live "mode" is itself configurable, unlike Groww/Kite (whose
+# live feeds always carry real volume): "ltp" is the original LTP-polling
+# feed (angelone_live_feed.py - volume always 0.0, "bars" are ~5s poll
+# snapshots), "candles" is the real-OHLCV/real-volume 1-minute-candle
+# feed (angelone_intraday_feed.py). Irrelevant for every other provider.
+_SUPPORTED_ANGELONE_LIVE_MODES = {"ltp", "candles"}
+
+_DEFAULT_STRATEGY_CONFIG_PATH = "config/strategies/simple_breakout_momentum.yaml"
 
 # Lookback window for the candidate price history bucket selection runs
 # against (see build_live_session) - short on purpose, this only needs to
@@ -26,6 +43,7 @@ _SUPPORTED_MARKET_DATA_PROVIDERS = {"memory", "groww", "kite"}
 _DEFAULT_HISTORICAL_LOOKBACK_DAYS = 10
 _DEFAULT_HISTORICAL_INTERVAL = "1day"  # real growwapi CANDLE_INTERVAL_DAY value
 _DEFAULT_KITE_HISTORICAL_INTERVAL = "day"  # real kiteconnect candle-interval value - NOT "1day"
+_DEFAULT_ANGELONE_HISTORICAL_INTERVAL = "ONE_DAY"  # real SmartAPI interval value
 
 # Explicitly the only (broker, market_data) pairs this app will run.
 # "groww/kite broker + memory data" is deliberately excluded: placing
@@ -35,10 +53,15 @@ _DEFAULT_KITE_HISTORICAL_INTERVAL = "day"  # real kiteconnect candle-interval va
 # only Kite's own market data requires the paid Connect tier - so
 # real Kite order execution paired with Groww-sourced quotes is a
 # legitimate, cost-motivated combination, not a mismatched one).
+# "paper broker + angelone data" is the equivalent case for Angel One:
+# Angel One is never a broker_provider (no order placement built - see
+# core/market_data/angelone_transport.py's module docstring), so it can
+# only ever pair with the paper broker, never groww/kite.
 _ALLOWED_PROVIDER_COMBINATIONS = {
     ("paper", "memory"),
     ("paper", "groww"),
     ("paper", "kite"),
+    ("paper", "angelone"),
     ("groww", "groww"),
     ("kite", "kite"),
     ("kite", "groww"),
@@ -73,6 +96,36 @@ class LiveTradingNotConfirmedError(RuntimeError):
     validation errors: paper-broker sessions (regardless of market-data
     provider) never need it, and no amount of "the rest of the config
     looks fine" substitutes for it.
+    """
+
+
+class MissingBrokerAlgoIdError(RuntimeError):
+    """
+    Raised when a real live broker (Groww or Kite) is requested but no
+    ``LIVE_BROKER_ALGO_ID`` is configured.
+
+    SEBI's retail algorithmic-trading framework (mandatory since 2026-04-01)
+    requires every order an algorithm places to carry a broker/exchange-
+    issued algo-strategy id - obtained by registering this platform's
+    strategy with the broker, not something this codebase can generate
+    itself. Static-IP whitelisting is a separate requirement (handled at
+    the network/hosting layer - see docs/runbooks/aws_integration.md) and
+    does not substitute for this. A paper session never needs this: it
+    places no real exchange order.
+    """
+
+
+class OptionsWritingNotConfirmedError(RuntimeError):
+    """
+    Raised when options writing is enabled (``LIVE_ENABLE_OPTIONS_WRITING``)
+    for a real live broker session but ``OPTIONS_WRITING_CONFIRM`` is
+    missing or doesn't match exactly.
+
+    Stacks with (never substitutes for) ``LiveTradingNotConfirmedError``:
+    a live naked-writing session needs both confirmations set. Never
+    raised for a paper session, regardless of ``LIVE_ENABLE_OPTIONS_WRITING``
+    - paper trading has no real margin/uncapped-risk exposure to gate
+    (see ``PaperBroker``'s "no real margin concept" limitation).
     """
 
 
@@ -116,13 +169,14 @@ class AngelOneEnvCredentials:
     """
     Angel One (SmartAPI) credentials as read from the environment.
 
-    Angel One is deliberately scoped to historical market data only in
-    this platform - it is never a ``LiveTraderConfig.broker_provider``
-    or ``market_data_provider`` option (see
-    ``core/market_data/factory.py``'s ``"angelone"`` branch, which
-    refuses live/paper mode outright). This loader exists for the
-    backtester/scripts that fetch Angel One historical candles, not for
-    the live trader's own provider selection.
+    Angel One is never a ``LiveTraderConfig.broker_provider`` - no order
+    placement is built for it (see
+    ``core/market_data/angelone_transport.py``'s module docstring) - but
+    it IS a valid ``market_data_provider`` for a "paper" broker session,
+    for both ``mode="historical"`` (bucket-selection price history) and
+    ``mode="live"`` (LTP-polling, see
+    ``core/market_data/angelone_live_feed.py``). See
+    ``_ALLOWED_PROVIDER_COMBINATIONS``.
 
     ``totp_secret`` is a base32 TOTP seed (the value shown under the
     SmartAPI "TOTP" QR code at setup), not a static code - a live
@@ -172,6 +226,16 @@ class LiveTraderConfig:
     historical_to_date: str
     historical_interval: str
     max_bars: int | None = None
+    angelone_live_mode: str = "ltp"
+    strategy_config_path: str = _DEFAULT_STRATEGY_CONFIG_PATH
+    options_writing_enabled: bool = False
+    options_writing_confirmed: bool = False
+    broker_algo_id: str | None = None
+
+    @property
+    def requires_broker_algo_id(self) -> bool:
+        """True only for a real live broker (Groww or Kite) - mirrors ``requires_live_confirmation``."""
+        return self.broker_provider in _LIVE_BROKER_PROVIDERS
 
     @property
     def requires_groww_credentials(self) -> bool:
@@ -184,9 +248,24 @@ class LiveTraderConfig:
         return self.broker_provider == "kite" or self.market_data_provider == "kite"
 
     @property
+    def requires_angelone_credentials(self) -> bool:
+        """True if the market-data feed needs a real Angel One connection (never the broker - see ``AngelOneEnvCredentials``)."""
+        return self.market_data_provider == "angelone"
+
+    @property
     def requires_live_confirmation(self) -> bool:
         """True only for a real live broker (Groww or Kite) - never for paper, regardless of market data."""
         return self.broker_provider in _LIVE_BROKER_PROVIDERS
+
+    @property
+    def requires_options_writing_confirmation(self) -> bool:
+        """
+        True only when options writing is enabled *and* this is a real
+        live broker session - a paper session never needs this gate
+        (mirrors ``requires_live_confirmation``'s identical reasoning),
+        regardless of ``options_writing_enabled``.
+        """
+        return self.options_writing_enabled and self.requires_live_confirmation
 
 
 def load_groww_credentials_from_env() -> GrowwEnvCredentials:
@@ -316,6 +395,13 @@ def _is_live_confirmed() -> bool:
     return os.environ.get(LIVE_CONFIRM_ENV_VAR, "").strip() == LIVE_CONFIRM_REQUIRED_VALUE
 
 
+def _is_options_writing_confirmed() -> bool:
+    return (
+        os.environ.get(OPTIONS_WRITING_CONFIRM_ENV_VAR, "").strip()
+        == OPTIONS_WRITING_CONFIRM_REQUIRED_VALUE
+    )
+
+
 def load_live_trader_config_from_env() -> LiveTraderConfig:
     """
     Read, normalize, and validate the live trader's top-level session
@@ -327,7 +413,9 @@ def load_live_trader_config_from_env() -> LiveTraderConfig:
     Environment variables:
 
     - ``LIVE_BROKER_PROVIDER``: ``"paper"`` (default), ``"groww"``, or ``"kite"``.
-    - ``LIVE_MARKET_DATA_PROVIDER``: ``"memory"`` (default), ``"groww"``, or ``"kite"``.
+    - ``LIVE_MARKET_DATA_PROVIDER``: ``"memory"`` (default), ``"groww"``,
+      ``"kite"``, or ``"angelone"`` (paper broker only - see
+      ``_ALLOWED_PROVIDER_COMBINATIONS``).
     - ``LIVE_UNIVERSE_EXCHANGE``: which exchange to select instruments
       from (default ``"NSE"``).
     - ``LIVE_DRY_RUN``: ``"1"``/``"true"``/``"yes"``/``"on"``
@@ -340,6 +428,16 @@ def load_live_trader_config_from_env() -> LiveTraderConfig:
       ``"I_UNDERSTAND_THIS_CAN_PLACE_REAL_ORDERS"`` when
       ``LIVE_BROKER_PROVIDER`` is ``"groww"`` or ``"kite"``; irrelevant
       otherwise.
+    - ``LIVE_ENABLE_OPTIONS_WRITING``: ``"1"``/``"true"``/``"yes"``/``"on"``
+      (case-insensitive) to allow naked option writing this run (default
+      ``False``) - a global "allowed to happen" gate, distinct from a
+      strategy's own ``allow_naked_writing`` config flag ("this strategy
+      wants to use it").
+    - ``OPTIONS_WRITING_CONFIRM``: must exactly equal
+      ``"I_UNDERSTAND_NAKED_OPTION_WRITING_HAS_UNCAPPED_RISK"`` when
+      ``LIVE_ENABLE_OPTIONS_WRITING`` is set on a real live broker
+      session; irrelevant otherwise. Stacks with ``LIVE_CONFIRM`` - both
+      are required together, neither substitutes for the other.
     - ``LIVE_ALLOW_UNRECONCILED_POSITIONS``: ``"1"``/``"true"``/``"yes"``/
       ``"on"`` (case-insensitive) to proceed even if the broker reports
       open positions before this session has placed anything (default
@@ -351,19 +449,38 @@ def load_live_trader_config_from_env() -> LiveTraderConfig:
       hard (default ``False`` - see
       ``core/audit/file_sink.find_unclean_prior_session``).
     - ``LIVE_HISTORICAL_FROM_DATE`` / ``LIVE_HISTORICAL_TO_DATE``:
-      ``"YYYY-MM-DD"`` window for the Groww/Kite historical candles
-      bucket selection reads price history from (only used when
-      ``market_data_provider`` is ``"groww"``/``"kite"``; see
-      ``build_live_session``'s candidate bucket-selection step). Defaults
-      to the last 10 days ending today.
+      ``"YYYY-MM-DD"`` window for the Groww/Kite/Angel One historical
+      candles bucket selection reads price history from (only used when
+      ``market_data_provider`` is ``"groww"``/``"kite"``/``"angelone"``;
+      see ``build_live_session``'s candidate bucket-selection step).
+      Defaults to the last 10 days ending today.
     - ``LIVE_HISTORICAL_INTERVAL``: candle interval for that same
       historical fetch (default ``"1day"`` for Groww, ``"day"`` for
-      Kite - see ``_build_candidate_market_data_config``).
+      Kite, ``"ONE_DAY"`` for Angel One - see
+      ``_build_candidate_market_data_config``).
+    - ``LIVE_ANGELONE_LIVE_MODE``: ``"ltp"`` (default) or ``"candles"`` -
+      only meaningful when ``LIVE_MARKET_DATA_PROVIDER=angelone``. "ltp"
+      is the original LTP-polling feed (no real volume). "candles" is
+      the real-OHLCV/real-volume 1-minute-candle feed - see
+      ``core/market_data/angelone_intraday_feed.py``. Any
+      volume-/multi-bar-lookback-based strategy (momentum, breakout,
+      pullback, MA crossover) needs "candles" to get a real signal.
+    - ``LIVE_BROKER_ALGO_ID``: the broker/exchange-issued algo-strategy id
+      SEBI's retail algo-trading framework requires on every order (see
+      ``MissingBrokerAlgoIdError``). Required (no default) whenever
+      ``LIVE_BROKER_PROVIDER`` is ``"groww"`` or ``"kite"``; irrelevant for
+      ``"paper"``.
+    - ``LIVE_STRATEGY_CONFIG_PATH``: path to a ``config/strategies/*.yaml``
+      file (default ``"config/strategies/simple_breakout_momentum.yaml"``,
+      today's only wired-in strategy) - which strategy this session runs,
+      and (via that file's optional ``candidate_profile:`` block) how
+      candidate selection screens for it. See
+      ``apps.live_trader.main.load_strategy_config``.
 
     Raises ``ValueError`` for an unsupported provider value, a
     non-integer ``LIVE_MAX_BARS``, or a provider combination outside
-    ``paper+memory`` / ``paper+groww`` / ``paper+kite`` / ``groww+groww``
-    / ``kite+kite``.
+    ``paper+memory`` / ``paper+groww`` / ``paper+kite`` / ``paper+angelone``
+    / ``groww+groww`` / ``kite+kite`` / ``kite+groww``.
     Raises ``LiveTradingNotConfirmedError`` if a real live broker (Groww
     or Kite) is requested without the exact confirmation string.
     """
@@ -374,6 +491,12 @@ def load_live_trader_config_from_env() -> LiveTraderConfig:
     allow_unreconciled_positions = _parse_bool_env("LIVE_ALLOW_UNRECONCILED_POSITIONS", default=False)
     allow_unclean_prior_session = _parse_bool_env("LIVE_ALLOW_UNCLEAN_PRIOR_SESSION", default=False)
     max_bars = _parse_optional_int_env("LIVE_MAX_BARS")
+    options_writing_enabled = _parse_bool_env("LIVE_ENABLE_OPTIONS_WRITING", default=False)
+    broker_algo_id = os.environ.get("LIVE_BROKER_ALGO_ID", "").strip() or None
+    angelone_live_mode = os.environ.get("LIVE_ANGELONE_LIVE_MODE", "ltp").strip().lower()
+    strategy_config_path = (
+        os.environ.get("LIVE_STRATEGY_CONFIG_PATH", "").strip() or _DEFAULT_STRATEGY_CONFIG_PATH
+    )
 
     today = date.today()
     default_from_date = today - timedelta(days=_DEFAULT_HISTORICAL_LOOKBACK_DAYS)
@@ -382,11 +505,15 @@ def load_live_trader_config_from_env() -> LiveTraderConfig:
     )
     historical_to_date = os.environ.get("LIVE_HISTORICAL_TO_DATE", "").strip() or today.isoformat()
     # Default interval string depends on which provider will actually
-    # consume it - Kite's candle-interval vocabulary ("day") differs from
-    # Groww's ("1day"); an explicit LIVE_HISTORICAL_INTERVAL always wins.
-    default_historical_interval = (
-        _DEFAULT_KITE_HISTORICAL_INTERVAL if market_data_provider == "kite" else _DEFAULT_HISTORICAL_INTERVAL
-    )
+    # consume it - each broker's candle-interval vocabulary differs
+    # ("day" vs "1day" vs "ONE_DAY"); an explicit LIVE_HISTORICAL_INTERVAL
+    # always wins.
+    if market_data_provider == "kite":
+        default_historical_interval = _DEFAULT_KITE_HISTORICAL_INTERVAL
+    elif market_data_provider == "angelone":
+        default_historical_interval = _DEFAULT_ANGELONE_HISTORICAL_INTERVAL
+    else:
+        default_historical_interval = _DEFAULT_HISTORICAL_INTERVAL
     historical_interval = (
         os.environ.get("LIVE_HISTORICAL_INTERVAL", "").strip() or default_historical_interval
     )
@@ -407,6 +534,11 @@ def load_live_trader_config_from_env() -> LiveTraderConfig:
             f"market_data='{market_data_provider}'. Supported combinations: "
             f"{sorted(_ALLOWED_PROVIDER_COMBINATIONS)}"
         )
+    if angelone_live_mode not in _SUPPORTED_ANGELONE_LIVE_MODES:
+        raise ValueError(
+            f"Unsupported LIVE_ANGELONE_LIVE_MODE '{angelone_live_mode}'. "
+            f"Supported: {sorted(_SUPPORTED_ANGELONE_LIVE_MODES)}"
+        )
 
     config = LiveTraderConfig(
         broker_provider=broker_provider,
@@ -421,6 +553,11 @@ def load_live_trader_config_from_env() -> LiveTraderConfig:
         historical_to_date=historical_to_date,
         historical_interval=historical_interval,
         max_bars=max_bars,
+        options_writing_enabled=options_writing_enabled,
+        options_writing_confirmed=_is_options_writing_confirmed(),
+        angelone_live_mode=angelone_live_mode,
+        strategy_config_path=strategy_config_path,
+        broker_algo_id=broker_algo_id,
     )
 
     if config.requires_live_confirmation and not config.live_confirmed:
@@ -429,6 +566,27 @@ def load_live_trader_config_from_env() -> LiveTraderConfig:
             "real live broker, which can place real orders with real capital. Set "
             f"{LIVE_CONFIRM_ENV_VAR}={LIVE_CONFIRM_REQUIRED_VALUE} to confirm you "
             "understand this, then run again."
+        )
+
+    if config.requires_broker_algo_id and not config.broker_algo_id:
+        raise MissingBrokerAlgoIdError(
+            f"Refusing to start: LIVE_BROKER_PROVIDER='{broker_provider}' requests a "
+            "real live broker. SEBI's retail algo-trading framework (mandatory since "
+            "2026-04-01) requires every algo-placed order to carry a broker/exchange-"
+            "issued algo-strategy id. Register this platform's strategy with your "
+            "broker to obtain one, then set LIVE_BROKER_ALGO_ID to it and run again. "
+            "(Static-IP whitelisting is a separate requirement, handled at the "
+            "network/hosting layer - see docs/runbooks/aws_integration.md - and does "
+            "not substitute for this.)"
+        )
+
+    if config.requires_options_writing_confirmation and not config.options_writing_confirmed:
+        raise OptionsWritingNotConfirmedError(
+            "Refusing to start: LIVE_ENABLE_OPTIONS_WRITING is set for a real live "
+            "broker session, which can write (sell to open) naked options - uncapped "
+            f"risk, unlike buying options. Set {OPTIONS_WRITING_CONFIRM_ENV_VAR}="
+            f"{OPTIONS_WRITING_CONFIRM_REQUIRED_VALUE} to confirm you understand this, "
+            "then run again."
         )
 
     return config

@@ -1,0 +1,56 @@
+id: FEAT-0010
+feature: session_vwap_distance
+hypothesis: >
+  A session's closing price relative to that SAME session's own
+  volume-weighted average price predicts the NEXT session's forward
+  5-day return.
+economic_mechanism: >
+  Short-term mean reversion: a session closing meaningfully above its own
+  volume-weighted center suggests late-session buying pressure/momentum
+  that has historically tended to partially unwind, not persist -
+  distinct from a pure momentum story.
+question_2_redundancy_check: >
+  Distinct from vwap_reversion.yaml (EXP-0009, confirmed loser) despite
+  the shared name - that strategy trades CURRENT distance from a ROLLING
+  intraday vwap as an INTRADAY reversion signal; this tests YESTERDAY's
+  session-END distance from that session's OWN fixed vwap as a predictor
+  of the NEXT session's return - different horizon (multi-day, not
+  intraday) and reference (one session's own vwap, not a rolling one).
+  See core/analytics/features.py's session_vwap_distance docstring.
+
+methodology: cross-sectional daily IC (feature computed once per trading day from that day's own intraday bars, not per-bar - see run_phase_a_feature_validation.py's validate_vwap_distance_feature)
+dataset: data/processed/nse_5min_dev.csv (10-symbol intraday universe, HINDUNILVR excluded - real corporate action, see FEAT-0001)
+period: 2025-07 to 2026-01 (~123 trading days, the smallest sample in the batch - 9 usable symbols)
+parameters: {forward_horizon_days: 5}
+
+bootstrap_ci:
+  point_estimate: -0.0665
+  lower: -0.1226
+  upper: -0.0100
+  n_resamples: 2000
+p_value: 0.059
+fdr_corrected: false   # Benjamini-Hochberg across all 11 Phase A features, fdr=0.05
+n_observations: 118
+
+git_commit: b32f494a980aa65e74b7e5753caa8dae3237e725
+data_snapshot_id: null
+python_version: "3.14.2"
+random_seed: 0
+
+date_opened: 2026-07-30
+date_decided: 2026-07-30
+decision: fail
+reason: >
+  The strongest near-miss in the entire batch: IC=-0.0665 (largest
+  magnitude of any feature tested), CI entirely below zero
+  [-0.1226, -0.0100], p=0.059 - misses the flat 0.05 bar by a hair and
+  fails FDR correction only because it's judged alongside 10 other
+  features. Direction is economically coherent (mean reversion, not
+  noise). The real limitation is sample size, not signal quality - only
+  9 usable symbols and ~123 days (n=118 daily-IC observations, smallest
+  of any feature here) because the intraday dataset that computing a
+  real session VWAP requires is this platform's most limited real
+  dataset. Worth re-testing first once more intraday history or symbols
+  are fetched, ahead of most other open items - this is the single
+  result most likely to flip to validated with more data, not speculation,
+  a specific, quantified near-miss.

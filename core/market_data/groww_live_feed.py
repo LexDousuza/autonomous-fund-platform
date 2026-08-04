@@ -72,14 +72,27 @@ class GrowwLiveMarketDataFeed(MarketDataFeed):
         self._exchange = exchange
         self._settings = settings or GrowwLiveFeedSettings()
         self._subscribed: set[str] = set()
+        # Per-symbol exchange override (see subscribe()) - defaults every
+        # symbol to self._exchange, so a plain subscribe(symbol) with no
+        # exchange behaves exactly as before this dict existed.
+        self._exchange_by_symbol: dict[str, str] = {}
         self._latest: dict[str, MarketBar] = {}
         self._history: dict[str, list[MarketBar]] = {}
 
-    def subscribe(self, symbol: str) -> None:
+    def subscribe(self, symbol: str, exchange: str | None = None) -> None:
+        """
+        Subscribe ``symbol``, optionally on a different exchange than this
+        feed's default (e.g. an NFO option contract alongside NSE cash
+        symbols - see ``core/execution/orchestrator.py``'s naked-write-open
+        handling). Re-subscribing an already-subscribed symbol updates its
+        tracked exchange.
+        """
         self._subscribed.add(symbol)
+        self._exchange_by_symbol[symbol] = exchange or self._exchange
 
     def unsubscribe(self, symbol: str) -> None:
         self._subscribed.discard(symbol)
+        self._exchange_by_symbol.pop(symbol, None)
 
     def get_latest_bar(self, symbol: str) -> MarketBar | None:
         """Return the most recent bar this feed has polled for ``symbol`` so far."""
@@ -123,8 +136,9 @@ class GrowwLiveMarketDataFeed(MarketDataFeed):
     # -- internals -----------------------------------------------------------
 
     def _poll_symbol(self, symbol: str) -> MarketBar | None:
-        data = self._transport.get_quote(symbol, self._exchange)
-        bar = self._parse_bar(symbol, data)
+        exchange = self._exchange_by_symbol.get(symbol, self._exchange)
+        data = self._transport.get_quote(symbol, exchange)
+        bar = self._parse_bar(symbol, exchange, data)
 
         existing = self._latest.get(symbol)
         if existing is not None and existing.timestamp == bar.timestamp:
@@ -134,7 +148,7 @@ class GrowwLiveMarketDataFeed(MarketDataFeed):
         self._history.setdefault(symbol, []).append(bar)
         return bar
 
-    def _parse_bar(self, symbol: str, data: dict) -> MarketBar:
+    def _parse_bar(self, symbol: str, exchange: str, data: dict) -> MarketBar:
         """
         Parse one Groww ``get_quote`` payload into a ``MarketBar``.
 
@@ -153,7 +167,9 @@ class GrowwLiveMarketDataFeed(MarketDataFeed):
         ``symbol``/``exchange`` are not present in the verified example
         response (unsurprising - they were already given as request
         params), so this always uses the values this feed was called
-        with, never a response field.
+        with (``exchange`` is this symbol's own tracked exchange - see
+        ``subscribe()`` - not always ``self._exchange``), never a
+        response field.
         """
         if "error" in data:
             raise UnsupportedSymbolError(
@@ -164,7 +180,7 @@ class GrowwLiveMarketDataFeed(MarketDataFeed):
             ohlc = data["ohlc"]
             return MarketBar(
                 symbol=symbol,
-                exchange=self._exchange,
+                exchange=exchange,
                 timestamp=self._parse_epoch_millis(data["last_trade_time"]),
                 open=float(ohlc["open"]),
                 high=float(ohlc["high"]),

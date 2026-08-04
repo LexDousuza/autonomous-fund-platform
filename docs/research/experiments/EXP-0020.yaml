@@ -1,0 +1,40 @@
+id: EXP-0020
+hypothesis: Statistically-fit GBM drift (1-min bars) predicts continuation when significant.
+economic_mechanism: >
+  Same mechanism as EXP-0016 (statistically-fit GBM drift momentum),
+  different bar interval/config (1-minute). See
+  docs/strategy-specs/gbm_momentum.md.
+
+dataset: data/processed/nse_1min_recent.csv
+period: {train_or_dev: "nse_1min_recent.csv", holdout: null}
+parameters: {lookback_bars: 60, min_t_stat: 2.5, session_window_minutes: 90}
+
+bootstrap_ci: {point_estimate: null, lower: null, upper: null, n_resamples: null}
+p_value: null
+fdr_corrected: null
+kill_criteria_result: {ci_lower_bound_above_1: null, fdr_p_under_threshold: null, holdout_drop_under_25pct: null, walk_forward_sign_consistent: null}
+
+git_commit: b32f494a980aa65e74b7e5753caa8dae3237e725
+config_version: config/strategies/gbm_momentum.yaml
+data_snapshot_id: sha256:9740088847bc771be51ada7a25865bad242a18b7e93cc997e7bd739f511e3363
+python_version: "3.14.2"
+random_seed: 0
+
+date_opened: 2026-07-28
+date_decided: 2026-08-05
+decision: archived
+reason: >
+  RE-AUDITED after the risk-manager fix (see
+  docs/research/ou_gbm_risk_manager_fix_reaudit.md), independently
+  re-traced (not by analogy this time - the analogy in the prior entry
+  turns out to be wrong for the reason, see EXP-0016's corrected entry).
+  Still 0 trades over the full nse_1min_recent.csv window after the fix:
+  5 signals rejected at the risk_manager stage, sample metadata:
+  projected_profit=Rs 4.78-4.79 vs. min_required_profit=Rs 6.50 (1.3 x Rs
+  5.00 - Groww's floor, not the proportional rate). This config's real
+  position sizes never reach the notional band where the "exact 2x tie"
+  story would even apply - same floor-domination mechanism as the OU
+  family, not the algebraic tie. The 1.3x recalibration narrowed the gap
+  (Rs 6.50 required vs. Rs 10.00 at the old 2.0x) but wasn't enough to
+  clear it here. Still archived: 0 trades, no statistical verdict
+  possible.

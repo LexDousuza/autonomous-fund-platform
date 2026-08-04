@@ -27,6 +27,7 @@ from core.audit.models import AuditEvent, AuditEventType, SessionMetadata, Sessi
 from core.audit.serialization import redact_secrets, to_json_safe
 from core.audit.sink import AuditSink
 from core.broker.groww_errors import GrowwError
+from core.broker.kite_errors import KiteError
 from core.market_data.errors import MarketDataError
 
 DEFAULT_BASE_DIR = "data/live_sessions"
@@ -41,11 +42,11 @@ def _classify_error(error: BaseException) -> AuditEventType:
     origin, without the orchestrator ever needing to know about
     provider-specific exception types (that would break its broker-/
     market-data-agnostic design). Only this persistence-layer module
-    needs to know ``GrowwError``/``MarketDataError`` exist.
+    needs to know ``GrowwError``/``KiteError``/``MarketDataError`` exist.
     """
     if isinstance(error, MarketDataError):
         return AuditEventType.MARKET_DATA_ERROR
-    if isinstance(error, GrowwError):
+    if isinstance(error, (GrowwError, KiteError)):
         return AuditEventType.BROKER_ERROR
     return AuditEventType.ORCHESTRATOR_ERROR
 

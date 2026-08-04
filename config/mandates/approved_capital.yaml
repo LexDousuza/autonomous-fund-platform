@@ -1,0 +1,13 @@
+# Human-approved capital ceiling for autonomous multi-strategy trading.
+#
+# This is the ONE number a human sets for the whole autonomous portfolio -
+# everything else (which strategy trades when, sizing, exits, kill-switches,
+# and how this total is split across active strategies) runs unattended.
+# No code path writes to this file automatically (contrast with
+# config/mandates/sample_mandate.yaml, whose trading_date a cron job rewrites
+# daily) - only a human editing this number raises what the system can risk.
+#
+# 0.0 is a deliberate placeholder: core.allocations.approved_capital refuses
+# to run with it, so multi-strategy trading cannot start until a human
+# replaces it with a real, considered figure.
+approved_capital: 0.0

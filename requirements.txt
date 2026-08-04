@@ -6,3 +6,6 @@ numpy==2.5.1  # already a transitive dependency (via growwapi -> pandas); pinned
 smartapi-python==1.5.5  # Angel One SmartAPI - historical market data only, see core/market_data/angelone_transport.py
 logzero==1.7.0  # hard import-time dependency of smartapi-python (not declared in its own metadata)
 websocket-client==1.9.0  # hard import-time dependency of smartapi-python's __init__.py (not declared in its own metadata)
+fastapi==0.141.1  # apps/api - JSON API backing the new web/ dashboard
+uvicorn==0.38.0  # ASGI server for apps/api
+psycopg2-binary==2.9.12  # sync Postgres driver for apps/api - matches this codebase's fully-synchronous convention

@@ -7,7 +7,7 @@ Run with:
 from __future__ import annotations
 
 import unittest
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 
 from core.broker.base import OptionType, OrderRequest, OrderSide, PositionEffect
 from core.broker.estimated_margin import EstimatedSpanMarginCalculator
@@ -18,6 +18,7 @@ from core.market_data.memory_feed import MemoryMarketDataFeed
 from core.market_data.service import MarketDataService
 from core.portfolio.exit_models import ExitDecision, ExitPolicyConfig
 from core.portfolio.models import PortfolioAllocationPlan
+from core.portfolio.position_manager import PositionManager
 from core.risk.base import RiskContext, RiskDecision, RiskManager
 from core.risk.options_margin import OptionsMarginRiskManager
 from core.strategy.base import MarketBar, SignalSide, Strategy, StrategyContext, TradeSignal
@@ -44,6 +45,17 @@ class NeverSignalStrategy(Strategy):
     """Test strategy that never emits a signal."""
 
     def on_bar(self, bar, history, open_positions):
+        return []
+
+
+class HistoryReportingStrategy(Strategy):
+    """Test strategy that records len(history) on the class itself (no signals) - for
+    asserting what history a caller's pre-seeded history_by_symbol actually delivers."""
+
+    last_history_length: int = 0
+
+    def on_bar(self, bar, history, open_positions):
+        HistoryReportingStrategy.last_history_length = len(history)
         return []
 
 
@@ -129,6 +141,44 @@ class AlwaysSellToOpenStrategy(Strategy):
                 metadata={"market_price": bar.close},
                 option_type=OptionType.CALL,
                 strike=100.0,
+                expiry="2026-08-27",
+                lot_size=1,
+                position_effect=PositionEffect.OPEN,
+            )
+        ]
+
+
+class SellToOpenDifferentSymbolStrategy(Strategy):
+    """
+    Test strategy that emits exactly one naked-write-open SELL signal, on
+    the first bar it sees, for a DIFFERENT symbol than the bar that
+    triggered it (e.g. an underlying's bar triggering a signal on that
+    underlying's own option contract) - unlike SellToOpenOnceStrategy
+    above, which (like every other single-symbol test in this file)
+    happens to write on the *same* symbol as the triggering bar, silently
+    sidestepping the real-world case where the option symbol was never
+    part of the session's originally-subscribed universe at all.
+    """
+
+    def __init__(self, context: StrategyContext) -> None:
+        super().__init__(context)
+        self._sold = False
+
+    def on_bar(self, bar, history, open_positions):
+        if self._sold:
+            return []
+        self._sold = True
+        return [
+            TradeSignal(
+                strategy_name=self.context.strategy_name,
+                symbol="NIFTY_PE_18000",
+                exchange="NFO",
+                side=SignalSide.SELL,
+                timestamp=bar.timestamp,
+                reason="test_sell_to_open_different_symbol",
+                metadata={"market_price": 50.0},
+                option_type=OptionType.PUT,
+                strike=18000.0,
                 expiry="2026-08-27",
                 lot_size=1,
                 position_effect=PositionEffect.OPEN,
@@ -986,6 +1036,38 @@ class NakedWriteOpenOrchestratorTests(unittest.TestCase):
         # Position closed: quantity back to zero after the buy-to-cover fill.
         self.assertEqual(result.final_positions[0].quantity, 0)
 
+    def test_naked_write_on_a_symbol_never_in_config_symbols_still_exits_at_square_off(self) -> None:
+        # The real-world shape this platform actually hits: the session
+        # only ever subscribes the underlying ("NIFTY"); the option symbol
+        # ("NIFTY_PE_18000") is discovered dynamically, at signal time, and
+        # was never part of config.symbols. Before the memory-feed fix,
+        # MemoryMarketDataFeed has zero bars for a symbol it was never
+        # constructed with, so this position could never be evaluated for
+        # exit again - it would still show fully open at session end
+        # despite square_off_time having clearly passed.
+        bars = make_symbol_bars([("NIFTY", 100.0), ("NIFTY", 101.0), ("NIFTY", 102.0)])
+        orchestrator, broker = make_orchestrator(
+            bars, FakeRiskManager(approve=True), "sell_to_open_diff", SellToOpenDifferentSymbolStrategy
+        )
+        config = make_config(
+            "sell_to_open_diff",
+            ["NIFTY"],
+            allocation_plan=make_allocation_plan(max_capital_per_trade=100.0),
+            exit_policy=ExitPolicyConfig(square_off_time=time(9, 16)),
+        )
+
+        result = orchestrator.run_session(config)
+
+        self.assertEqual(len(result.placed_orders), 1)
+        self.assertEqual(result.placed_orders[0].symbol, "NIFTY_PE_18000")
+
+        self.assertEqual(len(result.exit_decisions), 1)
+        self.assertEqual(result.exit_decisions[0].symbol, "NIFTY_PE_18000")
+        self.assertEqual(result.exit_decisions[0].reason, "square_off")
+
+        option_position = next(p for p in result.final_positions if p.symbol == "NIFTY_PE_18000")
+        self.assertEqual(option_position.quantity, 0)
+
 
 class NakedWriteMarginTrackingTests(unittest.TestCase):
     """
@@ -1142,6 +1224,254 @@ class OptionsSignalPricingTests(unittest.TestCase):
 
         self.assertEqual(len(result.placed_orders), 1)
         self.assertEqual(result.placed_orders[0].average_price, 100.0)
+
+
+class BuyNewSymbolOnceStrategy(Strategy):
+    """Buys a symbol NOT in config.symbols on the very first bar, then never signals again."""
+
+    def __init__(self, context: StrategyContext) -> None:
+        super().__init__(context)
+        self._bought = False
+
+    def on_bar(self, bar, history, open_positions):
+        if self._bought:
+            return []
+        self._bought = True
+        return [
+            TradeSignal(
+                strategy_name=self.context.strategy_name,
+                symbol="TEST_OPT", exchange="NSE", side=SignalSide.BUY, timestamp=bar.timestamp,
+                reason="test_buy_new_symbol",
+            )
+        ]
+
+
+class BuyOfSymbolOutsideConfigIsStillExitEvaluatedTests(unittest.TestCase):
+    """
+    core.execution.signal_pipeline.SignalPipeline.process_signal's SELL+OPEN
+    branch already subscribes/seeds a naked-write's dynamically-chosen
+    option symbol (see its own comment on why: a live Kite/Groww feed
+    only polls what's subscribed, and MemoryMarketDataFeed's bars are a
+    fixed list built before that symbol existed) - the plain BUY branch
+    never did the same. Invisible for every existing strategy (a BUY
+    always targets a symbol already in config.symbols), but exactly what
+    core.strategy.credit_spread's protective long leg does: buys a
+    dynamically-chosen option contract never in config.symbols. Without
+    this, that leg would be tracked but never exit-evaluated again, in
+    live/paper too, not just a backtest - masked until now only because
+    credit_spread was hard-blocked from ever running at all.
+    """
+
+    def test_bought_symbol_not_in_config_symbols_is_still_exit_evaluated(self) -> None:
+        base = datetime(2026, 1, 1, 9, 15, 0)
+        trigger_bar = MarketBar(
+            symbol="TEST", exchange="NSE", timestamp=base,
+            open=100.0, high=100.0, low=100.0, close=100.0, volume=1000.0,
+        )
+        # A later bar for the BOUGHT symbol, breaching a 5% stop - only
+        # ever streams at all if the buy correctly subscribed it (see
+        # MemoryMarketDataFeed.stream()'s subscription filter).
+        later_bar = MarketBar(
+            symbol="TEST_OPT", exchange="NSE", timestamp=base + timedelta(minutes=1),
+            open=80.0, high=80.0, low=80.0, close=80.0, volume=1000.0,
+        )
+        orchestrator, broker = make_orchestrator(
+            [trigger_bar, later_bar], FakeRiskManager(approve=True), "buy_new_symbol", BuyNewSymbolOnceStrategy
+        )
+        config = make_config("buy_new_symbol", ["TEST"], exit_policy=ExitPolicyConfig(stop_loss_pct=5.0))
+
+        result = orchestrator.run_session(config)
+
+        self.assertEqual(len(result.placed_orders), 1)
+        self.assertEqual(len(result.exit_orders), 1)
+        self.assertEqual(result.exit_decisions[0].reason, "stop_loss")
+
+    def test_ordinary_buy_of_an_already_subscribed_symbol_is_unaffected(self) -> None:
+        # Regression guard: every existing strategy buys a symbol already
+        # in config.symbols - subscribe()/seed_synthetic_price_path are
+        # both documented no-ops for an already-subscribed/already-real
+        # symbol, so this must behave exactly as before the fix.
+        bars = make_price_bars([100.0, 80.0])  # bar 2 breaches a 5% stop
+        orchestrator, broker = make_orchestrator(
+            bars, FakeRiskManager(approve=True), "always_buy", AlwaysBuyStrategy
+        )
+        config = make_config("always_buy", ["TEST"], exit_policy=ExitPolicyConfig(stop_loss_pct=5.0))
+
+        result = orchestrator.run_session(config)
+
+        self.assertEqual(len(result.placed_orders), 1)
+        self.assertEqual(len(result.exit_orders), 1)
+        self.assertEqual(result.exit_decisions[0].reason, "stop_loss")
+
+
+class BuyWithGroupIdStrategy(Strategy):
+    """Emits exactly one BUY signal, tagged with a fixed group_id, on the first bar it sees."""
+
+    def __init__(self, context: StrategyContext) -> None:
+        super().__init__(context)
+        self._signaled = False
+
+    def on_bar(self, bar, history, open_positions):
+        if self._signaled:
+            return []
+        self._signaled = True
+        return [
+            TradeSignal(
+                strategy_name=self.context.strategy_name,
+                symbol=bar.symbol, exchange=bar.exchange, side=SignalSide.BUY, timestamp=bar.timestamp,
+                reason="test_buy_with_group_id", group_id="group-xyz",
+            )
+        ]
+
+
+class SellToOpenWithGroupIdStrategy(Strategy):
+    """Emits exactly one naked-write SELL+OPEN signal, tagged with a fixed group_id."""
+
+    def __init__(self, context: StrategyContext) -> None:
+        super().__init__(context)
+        self._signaled = False
+
+    def on_bar(self, bar, history, open_positions):
+        if self._signaled:
+            return []
+        self._signaled = True
+        return [
+            TradeSignal(
+                strategy_name=self.context.strategy_name,
+                symbol=bar.symbol, exchange=bar.exchange, side=SignalSide.SELL, timestamp=bar.timestamp,
+                reason="test_sell_to_open_with_group_id", metadata={"market_price": 50.0},
+                option_type=OptionType.PUT, strike=18000.0, expiry="2026-08-27", lot_size=1,
+                position_effect=PositionEffect.OPEN, group_id="group-xyz",
+            )
+        ]
+
+
+class SignalGroupIdThreadingTests(unittest.TestCase):
+    """
+    TradeSignal.group_id (see core/strategy/base.py) is how a strategy
+    emitting multiple legs from one signal chain - e.g. credit_spread's
+    long+short pair - tags them as belonging together, so
+    PositionManager.evaluate_group_exits can later evaluate and close
+    them as one joint decision. Threaded through both branches of
+    SignalPipeline.process_signal that call position_manager.register_entry.
+    """
+
+    def test_buy_signal_group_id_is_threaded_to_the_tracked_position(self) -> None:
+        bars = make_bars(1)
+        orchestrator, broker = make_orchestrator(
+            bars, FakeRiskManager(approve=True), "buy_with_group", BuyWithGroupIdStrategy
+        )
+        position_manager = PositionManager()
+
+        orchestrator.run_session(make_config("buy_with_group", ["TEST"]), position_manager=position_manager)
+
+        self.assertEqual(position_manager.open_positions()["NSE:TEST"].group_id, "group-xyz")
+
+    def test_sell_to_open_signal_group_id_is_threaded_to_the_tracked_position(self) -> None:
+        bars = make_bars(1)
+        orchestrator, broker = make_orchestrator(
+            bars, FakeRiskManager(approve=True), "sell_open_with_group", SellToOpenWithGroupIdStrategy
+        )
+        position_manager = PositionManager()
+
+        orchestrator.run_session(
+            make_config("sell_open_with_group", ["TEST"]), position_manager=position_manager
+        )
+
+        self.assertEqual(position_manager.open_positions()["NSE:TEST"].group_id, "group-xyz")
+
+    def test_signal_without_group_id_produces_none_unchanged(self) -> None:
+        bars = make_bars(1)
+        orchestrator, broker = make_orchestrator(
+            bars, FakeRiskManager(approve=True), "always_buy", AlwaysBuyStrategy
+        )
+        position_manager = PositionManager()
+
+        orchestrator.run_session(make_config("always_buy", ["TEST"]), position_manager=position_manager)
+
+        self.assertIsNone(position_manager.open_positions()["NSE:TEST"].group_id)
+
+
+class RunSessionCarriedPositionManagerTests(unittest.TestCase):
+    """
+    run_session's optional position_manager= kwarg (see
+    core/backtest/multi_day_position_runner.py, the caller that actually
+    needs this): a caller carrying a position across a simulated day
+    boundary passes an already-populated PositionManager in instead of
+    letting run_session build an empty one - the seam that makes
+    multi-day holding possible without duplicating run_session's
+    guardrail/pricing/sizing/exposure/risk/place/register pipeline.
+    """
+
+    def test_carried_position_is_exit_evaluated_without_a_new_entry(self) -> None:
+        # A position opened "yesterday" - this session's own strategy
+        # never signals at all - must still be exit-evaluated from bar
+        # one purely because it was passed in via position_manager=.
+        bars = make_price_bars([100.0, 80.0])  # bar 2 breaches a 5% stop
+        orchestrator, broker = make_orchestrator(
+            bars, FakeRiskManager(approve=True), "never_signal", NeverSignalStrategy
+        )
+        position_manager = PositionManager()
+        position_manager.register_entry(
+            symbol="TEST",
+            exchange="NSE",
+            quantity=10,
+            entry_price=100.0,
+            entry_time=datetime(2025, 12, 31, 15, 20, 0),
+            strategy_name="never_signal",
+        )
+        config = make_config("never_signal", ["TEST"], exit_policy=ExitPolicyConfig(stop_loss_pct=5.0))
+
+        result = orchestrator.run_session(config, position_manager=position_manager)
+
+        self.assertEqual(len(result.placed_orders), 0)
+        self.assertEqual(len(result.exit_orders), 1)
+        self.assertEqual(result.exit_decisions[0].reason, "stop_loss")
+
+    def test_omitting_position_manager_behaves_exactly_as_before(self) -> None:
+        # No new argument passed - every existing call site in this
+        # codebase - must still start from a genuinely empty book: no
+        # exit fires for a symbol nothing was ever opened for.
+        bars = make_price_bars([100.0, 80.0])
+        orchestrator, broker = make_orchestrator(
+            bars, FakeRiskManager(approve=True), "never_signal", NeverSignalStrategy
+        )
+        config = make_config("never_signal", ["TEST"], exit_policy=ExitPolicyConfig(stop_loss_pct=5.0))
+
+        result = orchestrator.run_session(config)
+
+        self.assertEqual(len(result.exit_orders), 0)
+
+    def test_pre_seeded_history_by_symbol_is_visible_to_the_strategy(self) -> None:
+        # A caller carrying a position across a day boundary (see
+        # core/backtest/multi_day_position_runner.py) also needs a
+        # lookback-dependent strategy's bar HISTORY to survive the same
+        # boundary - run_session's own history_by_symbol is otherwise
+        # rebuilt empty every single call, silently starving any
+        # strategy that needs more than the current bar's worth of
+        # history (e.g. a realized-vol estimate over N prior closes)
+        # even though positions/broker state correctly carried over.
+        bars = make_bars(1, symbol="TEST")  # just today's one bar
+        orchestrator, broker = make_orchestrator(
+            bars, FakeRiskManager(approve=True), "history_reporting", HistoryReportingStrategy
+        )
+        history_by_symbol = {"NSE:TEST": make_bars(5, symbol="TEST")}  # 5 bars "from yesterday"
+        config = make_config("history_reporting", ["TEST"])
+
+        orchestrator.run_session(config, history_by_symbol=history_by_symbol)
+
+        self.assertEqual(HistoryReportingStrategy.last_history_length, 5)
+
+    def test_omitting_history_by_symbol_behaves_exactly_as_before(self) -> None:
+        bars = make_bars(1, symbol="TEST")
+        orchestrator, broker = make_orchestrator(
+            bars, FakeRiskManager(approve=True), "history_reporting", HistoryReportingStrategy
+        )
+        config = make_config("history_reporting", ["TEST"])
+
+        orchestrator.run_session(config)
+
+        self.assertEqual(HistoryReportingStrategy.last_history_length, 0)
 
 
 if __name__ == "__main__":

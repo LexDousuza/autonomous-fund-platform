@@ -128,6 +128,11 @@ class KiteBrokerAdapter(Broker):
             KiteTransportConfig(credentials=credentials, timeout_seconds=timeout_seconds)
         )
 
+    @property
+    def transport(self) -> KiteHttpTransport:
+        """Exposed so callers can build a KiteMarginCalculator from this adapter's own authenticated transport."""
+        return self._transport
+
     def place_order(self, order_request: OrderRequest) -> Order:
         """
         Build a Kite order payload, send it, then immediately fetch the
@@ -172,7 +177,14 @@ class KiteBrokerAdapter(Broker):
             variety=_VARIETY_REGULAR,
             price=order.price,
             trigger_price=order.trigger_price,
-            tag=order.client_order_id,
+            # SEBI's algo tag (order.algo_id) wins this single 20-char field
+            # when configured - it's a regulatory requirement, unlike
+            # client_order_id, which is only this platform's own internal
+            # idempotency correlation (recorded separately in the audit log
+            # via ORDER_SUBMITTED/ORDER_PLACED's reference_id, not lost by
+            # not being in this field - see core/broker/base.py's
+            # OrderRequest.algo_id docstring).
+            tag=order.algo_id or order.client_order_id,
         )
 
     # -- outbound calls (delegate to the transport; mockable in tests) ------

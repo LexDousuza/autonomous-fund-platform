@@ -1,0 +1,45 @@
+id: EXP-0016
+hypothesis: Statistically-fit GBM drift (5-min bars) predicts continuation when significant.
+economic_mechanism: >
+  Replaces momentum's fixed price/volume thresholds with a formal one-sample
+  t-test on fitted drift (mu) of a GBM model - the hypothesis is that
+  drift statistically distinguishable from zero over the lookback window
+  reflects genuine directional order flow (not noise) that continues
+  briefly. Doesn't share raw-OU's small-sample bias problem - a one-sample
+  t-test on a mean is a standard, well-behaved test, verified empirically
+  to clear only ~1-2% of the time on simulated zero-drift noise. See
+  docs/strategy-specs/gbm_momentum.md.
+
+dataset: data/processed/nse_5min_dev.csv
+period: {train_or_dev: "nse_5min_dev.csv, 123 trading days", holdout: null}
+parameters: {lookback_bars: 60, min_t_stat: 2.5, session_window_minutes: null}
+
+bootstrap_ci: {point_estimate: null, lower: null, upper: null, n_resamples: null}
+p_value: null
+fdr_corrected: null
+kill_criteria_result: {ci_lower_bound_above_1: null, fdr_p_under_threshold: null, holdout_drop_under_25pct: null, walk_forward_sign_consistent: null}
+
+git_commit: b32f494a980aa65e74b7e5753caa8dae3237e725
+config_version: config/strategies/gbm_momentum_5min.yaml
+data_snapshot_id: sha256:a172d0e259f144091bda8b63db988e755a97fb2245c7a9cb9a73dce1825f8177
+python_version: "3.14.2"
+random_seed: 0
+
+date_opened: 2026-07-28
+date_decided: 2026-08-05
+decision: archived
+reason: >
+  RE-AUDITED after the risk-manager fix (gbm_momentum now gets the 1.3x
+  override too - see docs/research/ou_gbm_risk_manager_fix_reaudit.md).
+  This CORRECTS the prior entry's mechanism claim: the "exact algebraic
+  tie at 2.0x" story explained why EVERY trade was rejected at the old
+  ratio, but re-instrumenting after the fix shows the real position sizes
+  in this dataset never actually reach the ~Rs 5,000-20,000 band where
+  that proportional-rate tie would apply - they're small enough that
+  Groww's Rs 5 floor dominates instead (same mechanism as the OU family,
+  not the tie). 20 signals still rejected at the risk_manager stage post-
+  fix, sample metadata: projected_profit=Rs 2.98-2.99 vs.
+  min_required_profit=Rs 6.50 (1.3 x Rs 5.00 floor) - the 1.3x
+  recalibration wasn't enough to clear this config's real, smaller
+  notional. Still 0 trades, still archived - the actual blocker for THIS
+  config was the floor, not the tie the original diagnosis emphasized.

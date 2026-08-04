@@ -22,17 +22,31 @@ per interval (verified from the docs,
 requested window against that ceiling itself and fails loudly with a
 clear message before ever calling the transport, rather than letting a
 too-wide request reach the API and fail there with a less useful error.
+
+``getCandleData`` also has its own documented rate limit - 3 requests/
+second, 180/minute (verified against the SmartAPI forum's own rate-limit
+announcement thread, since the current docs page is JS-rendered and
+didn't yield the number directly) - separate from and stricter than the
+bulk ``/quote`` endpoint's 1 req/sec (see
+``angelone_transport.get_ltp_batch``). Unlike that endpoint, there's no
+bulk variant of ``getCandleData`` to batch into fewer requests, so
+``_fetch_all`` paces individual calls instead (``_DEFAULT_PACING_SECONDS``,
+comfortably under the 3/sec cap) - discovered the hard way in production
+by a real "Access denied because of exceeding access rate" failure when
+this feed was pointed at more than a couple of instruments with no
+pacing at all.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+import time
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 
+from core.market_data.angelone_candles import parse_candles
 from core.market_data.angelone_transport import MAX_DAYS_PER_INTERVAL, AngelOneMarketDataTransport
 from core.market_data.base import MarketDataFeed
-from core.market_data.errors import MarketDataTransportError
 from core.strategy.base import MarketBar
 
 # Angel One requires full "yyyy-MM-dd HH:mm" timestamps, not bare dates -
@@ -40,6 +54,10 @@ from core.strategy.base import MarketBar
 # mirroring KiteHistoricalMarketDataFeed's identical reasoning.
 _SESSION_START_TIME = "09:15"
 _SESSION_END_TIME = "15:30"
+
+# getCandleData's documented cap is 3 req/sec - paced comfortably under
+# that (see module docstring) rather than exactly at it.
+_DEFAULT_PACING_SECONDS = 0.4
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,14 +115,20 @@ class AngelOneHistoricalMarketDataFeed(MarketDataFeed):
         transport: AngelOneMarketDataTransport,
         instruments: list[AngelOneHistoricalInstrument],
         settings: AngelOneHistoricalFeedSettings,
+        pacing_seconds: float = _DEFAULT_PACING_SECONDS,
+        sleep_fn: Callable[[float], None] = time.sleep,
     ) -> None:
         self._transport = transport
         self._settings = settings
+        self._pacing_seconds = pacing_seconds
+        self._sleep_fn = sleep_fn
         self._subscribed: set[str] = set()
         self._latest: dict[str, MarketBar] = {}
         self._bars: list[MarketBar] = self._fetch_all(instruments)
 
-    def subscribe(self, symbol: str) -> None:
+    def subscribe(self, symbol: str, exchange: str | None = None) -> None:
+        # exchange unused: a historical feed's bars already carry their own
+        # exchange field; nothing here polls per symbol against one.
         self._subscribed.add(symbol)
 
     def unsubscribe(self, symbol: str) -> None:
@@ -135,7 +159,9 @@ class AngelOneHistoricalMarketDataFeed(MarketDataFeed):
         to_time = f"{self._settings.to_date.isoformat()} {_SESSION_END_TIME}"
 
         bars: list[MarketBar] = []
-        for instrument in instruments:
+        for index, instrument in enumerate(instruments):
+            if index > 0:
+                self._sleep_fn(self._pacing_seconds)
             candles = self._transport.get_historical_candles(
                 instrument.symbol,
                 instrument.exchange,
@@ -143,52 +169,7 @@ class AngelOneHistoricalMarketDataFeed(MarketDataFeed):
                 from_time,
                 to_time,
             )
-            bars.extend(self._parse_candles(instrument, candles))
+            bars.extend(parse_candles(instrument.symbol, instrument.exchange, candles))
 
         bars.sort(key=lambda bar: (bar.timestamp, bar.symbol))
         return bars
-
-    def _parse_candles(
-        self, instrument: AngelOneHistoricalInstrument, candles: list[list]
-    ) -> list[MarketBar]:
-        """
-        Parse Angel One's raw positional candle arrays into
-        ``MarketBar``s. Verified shape: ``[timestamp_iso8601, open,
-        high, low, close, volume]``.
-        """
-        parsed: list[MarketBar] = []
-        for candle in candles:
-            try:
-                timestamp_raw, open_, high, low, close, volume = candle
-            except (ValueError, TypeError) as exc:
-                raise MarketDataTransportError(
-                    f"Malformed Angel One candle for '{instrument.symbol}': "
-                    f"expected 6 fields, got {candle!r}"
-                ) from exc
-
-            parsed.append(
-                MarketBar(
-                    symbol=instrument.symbol,
-                    exchange=instrument.exchange,
-                    timestamp=self._normalize_timestamp(timestamp_raw),
-                    open=float(open_),
-                    high=float(high),
-                    low=float(low),
-                    close=float(close),
-                    volume=float(volume),
-                )
-            )
-
-        return parsed
-
-    @staticmethod
-    def _normalize_timestamp(value: str) -> datetime:
-        """
-        Angel One returns an ISO8601 string with a ``+05:30`` (IST)
-        offset (e.g. ``"2023-09-06T11:15:00+05:30"``) - normalized to a
-        naive ``datetime``, matching this codebase's naive-datetime
-        convention (see ``KiteHistoricalMarketDataFeed``'s identical
-        ``_normalize_timestamp``).
-        """
-        parsed = datetime.fromisoformat(value)
-        return parsed.replace(tzinfo=None) if parsed.tzinfo is not None else parsed

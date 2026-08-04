@@ -379,6 +379,7 @@ class SignalPipeline:
             target_pct=self.exit_policy.target_pct if self.exit_policy else None,
             available_margin=self.available_margin,
             used_margin=self.used_margin,
+            strategy_name=signal.strategy_name,
         )
 
         decision = self.risk_manager.evaluate(order, risk_context)
@@ -456,7 +457,13 @@ class SignalPipeline:
             self._on_order_rejection()
             return _SignalOutcome(filled=False, quantity=0)
 
-        self.used_intraday_capital += (placed.average_price or 0.0) * placed.quantity
+        # filled_quantity, not quantity (the requested amount) - a live
+        # Kite/Groww PARTIALLY_FILLED order has filled_quantity < quantity,
+        # and using the requested amount here would register a phantom
+        # quantity larger than what the broker actually holds (PaperBroker
+        # always fully fills, so filled_quantity == quantity there; this
+        # only changes behavior for a genuine partial fill).
+        self.used_intraday_capital += (placed.average_price or 0.0) * placed.filled_quantity
         # Read back from the approved decision rather than recomputing here -
         # only OptionsMarginRiskManager knows which orders are margin-relevant
         # and what they cost; absent that key, this order never consumed margin.
@@ -468,10 +475,20 @@ class SignalPipeline:
         self.emit_guardrail_block_if_newly_triggered()
 
         if order.side == OrderSide.BUY:
+            # Subscribing/seeding here (see _track_symbol_for_future_bars'
+            # docstring) is not just a naked-write concern: a plain BUY
+            # can also target a symbol never in this session's original
+            # config.symbols (e.g. core.strategy.credit_spread's
+            # protective long leg, a dynamically-chosen option contract)
+            # - without it, that position would be tracked but never see
+            # another bar again, so no exit rule could ever fire for it.
+            # A no-op for every ordinary strategy's BUY (already-
+            # subscribed symbol, already-real bars in the feed).
+            self._track_symbol_for_future_bars(placed.symbol, placed.exchange, bar, placed.average_price or 0.0)
             self.position_manager.register_entry(
                 symbol=placed.symbol,
                 exchange=placed.exchange,
-                quantity=placed.quantity,
+                quantity=placed.filled_quantity,
                 entry_price=placed.average_price or 0.0,
                 entry_time=bar.timestamp,
                 strategy_name=signal.strategy_name,
@@ -480,20 +497,41 @@ class SignalPipeline:
             # A naked-write open (e.g. a short option) - tracked as a
             # negative-quantity position, mirrored by exits.py's short-
             # aware stop/target math and build_exit_order's buy-to-cover
-            # side selection above. Subscribing here (idempotent -
-            # MarketDataFeed.subscribe is a set add) is what makes exit
-            # evaluation ever see a bar for this option symbol at all.
-            self.market_data_service.subscribe(placed.symbol, exchange=placed.exchange)
+            # side selection above.
+            self._track_symbol_for_future_bars(placed.symbol, placed.exchange, bar, placed.average_price or 0.0)
             self.position_manager.register_entry(
                 symbol=placed.symbol,
                 exchange=placed.exchange,
-                quantity=-placed.quantity,
+                quantity=-placed.filled_quantity,
                 entry_price=placed.average_price or 0.0,
                 entry_time=bar.timestamp,
                 strategy_name=signal.strategy_name,
             )
 
-        return _SignalOutcome(filled=True, quantity=placed.quantity)
+        return _SignalOutcome(filled=True, quantity=placed.filled_quantity)
+
+    def _track_symbol_for_future_bars(self, symbol: str, exchange: str, bar: MarketBar, seed_price: float) -> None:
+        """
+        Ensure a newly-opened position's symbol keeps receiving bars for
+        the rest of the session, so ``PositionManager.evaluate_exits``
+        has something to evaluate it against later.
+
+        Subscribing (idempotent - ``MarketDataFeed.subscribe`` is a set
+        add) is what makes a live Kite/Groww feed poll this symbol at
+        all - those feeds re-poll their subscribed set fresh every
+        cycle. A paper-mode ``MemoryMarketDataFeed`` has no live poll to
+        re-run, though: its bars are a fixed list built before this
+        symbol ever existed, so subscribing alone would never make one
+        appear - ``seed_synthetic_price_path`` (duck-typed, only
+        ``MemoryMarketDataFeed`` implements it; a no-op if the symbol
+        already has real bars) is what actually gives paper trading bars
+        to evaluate exits against for a dynamically-opened symbol. See
+        that method's own docstring for what it does and doesn't model.
+        """
+        self.market_data_service.subscribe(symbol, exchange=exchange)
+        seed_synthetic_bars = getattr(self.market_data_service.active_feed, "seed_synthetic_price_path", None)
+        if seed_synthetic_bars is not None:
+            seed_synthetic_bars(symbol, exchange, after_timestamp=bar.timestamp, seed_price=seed_price)
 
     def process_exit(
         self,
@@ -559,9 +597,34 @@ class SignalPipeline:
             quantity=exit_order.quantity,
             average_price=exit_order.average_price,
         )
-        self.position_manager.clear(exit_decision.symbol, exit_decision.exchange)
+
+        if exit_order.status not in (OrderStatus.FILLED, OrderStatus.PARTIALLY_FILLED):
+            # Not an actual fill (e.g. REJECTED) - the position is still
+            # genuinely open at the broker. Leave it tracked exactly as
+            # it was so exit evaluation keeps considering it on later
+            # bars, rather than silently declaring it closed when it
+            # never actually exited (mirrors process_signal's identical
+            # phantom-fill reasoning for entries).
+            return
+
+        if exit_order.filled_quantity >= abs(exit_decision.quantity):
+            self.position_manager.clear(exit_decision.symbol, exit_decision.exchange)
+        else:
+            # A genuine partial fill: only part of the position actually
+            # closed - reduce the tracked quantity instead of clearing
+            # it outright, so the remainder stays under exit management.
+            self.position_manager.reduce_quantity(
+                exit_decision.symbol, exit_decision.exchange, exit_order.filled_quantity
+            )
 
         if tracked is not None and exit_order.average_price is not None:
-            realized_pnl = (exit_order.average_price - tracked.entry_price) * exit_decision.quantity
+            # Realized only for the quantity that actually filled, not
+            # the full amount the exit decision intended to close -
+            # signed to match exit_decision.quantity's own sign
+            # convention (positive long, negative short).
+            signed_filled_quantity = (
+                exit_order.filled_quantity if exit_decision.quantity > 0 else -exit_order.filled_quantity
+            )
+            realized_pnl = (exit_order.average_price - tracked.entry_price) * signed_filled_quantity
             self.session_guardrails.record_realized_pnl(realized_pnl)
             self.emit_guardrail_block_if_newly_triggered()

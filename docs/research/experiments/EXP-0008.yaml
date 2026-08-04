@@ -1,0 +1,32 @@
+id: EXP-0008
+hypothesis: Fast/slow moving-average crossover predicts continuation.
+economic_mechanism: >
+  Classic trend-following: a fast-SMA crossing above a slow-SMA (a "golden
+  cross") marks the start of a new uptrend, and the hypothesis is that a
+  young trend has real persistence - momentum/trend-following capital
+  piles in once the cross is visible, extending the move rather than
+  immediately reverting. See docs/strategy-specs/ma_crossover.md.
+
+dataset: data/processed/nse_5min_dev.csv
+period: {train_or_dev: "nse_5min_dev.csv, 123 trading days", holdout: null}
+parameters: {fast_bars: 5, slow_bars: 20}
+
+bootstrap_ci: {point_estimate: 0.17732076610022388, lower: 0.12616176552475114, upper: 0.23860788888538773, n_resamples: 2000}
+p_value: 0.0
+fdr_corrected: true   # Benjamini-Hochberg across all 10 experiments with a computed p-value, fdr=0.05 - significant, but the CI is below 1 (a confirmed loss), see reason below
+kill_criteria_result: {ci_lower_bound_above_1: false, fdr_p_under_threshold: true, holdout_drop_under_25pct: null, walk_forward_sign_consistent: null}
+
+git_commit: b32f494a980aa65e74b7e5753caa8dae3237e725
+config_version: config/strategies/ma_crossover.yaml
+data_snapshot_id: sha256:a172d0e259f144091bda8b63db988e755a97fb2245c7a9cb9a73dce1825f8177
+python_version: "3.14.2"
+random_seed: 0
+
+date_opened: 2026-07-28
+date_decided: 2026-07-28
+decision: fail
+reason: >
+  398 trades, CI [0.13, 0.24] entirely below 1, p=0.0000 - a real,
+  statistically significant LOSS once realistic transaction costs are
+  applied, not just "no edge." Overtrades (398 trades over 123 days) on
+  costs that outrun the small per-trade edge this heuristic finds.

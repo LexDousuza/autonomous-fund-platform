@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from uuid import uuid4
 
 from apps.live_trader.aws_secrets import load_secrets_into_env
+from apps.live_trader.candidate_selection import build_session_bars, select_session_instruments
 from apps.live_trader.config import (
+    AngelOneEnvCredentials,
     GrowwEnvCredentials,
     KiteEnvCredentials,
     LiveTraderConfig,
+    load_angelone_credentials_from_env,
     load_groww_credentials_from_env,
     load_kite_credentials_from_env,
     load_live_trader_config_from_env,
@@ -18,18 +21,27 @@ from core.audit.file_sink import FileAuditSink, find_unclean_prior_session
 from core.audit.models import SessionMetadata, SessionSummary
 from core.audit.sink import AuditSink
 from core.broker.base import Broker
+from core.broker.estimated_margin import EstimatedSpanMarginCalculator
 from core.broker.factory import build_broker
 from core.broker.factory_models import BrokerConfig
+from core.broker.groww_margin import GrowwMarginCalculator
+from core.broker.kite_errors import KiteAuthenticationError
+from core.broker.kite_margin import KiteMarginCalculator, fetch_available_margin
 from core.execution.models import ExecutionSessionResult, TradingSessionConfig
 from core.execution.orchestrator import ExecutionOrchestrator
 from core.execution.reconciliation import ReconciliationResult, check_broker_reconciliation
-from core.market_data.bucket_selector import (
-    BucketSelectionCriteria,
-    BucketSelectionResult,
-    CapitalRiskBucketSelector,
-)
+from core.market_data.bucket_selector import BucketSelectionResult
+from core.market_data.candidate_prescreen import PrescreenResult
+from core.market_data.candidate_profile import CandidateProfile
+from core.market_data.candidate_selection_store import CandidateSelection, load_candidate_selection
 from core.market_data.factory import build_market_data_feed
 from core.market_data.factory_models import MarketDataConfig
+from core.market_data.kite_option_chain import KiteOptionChainProvider
+from core.market_data.kite_transport import (
+    KiteMarketDataCredentials,
+    KiteMarketDataTransport,
+    KiteMarketDataTransportConfig,
+)
 from core.market_data.service import MarketDataService
 from core.market_data.universe_loader import load_instrument_universe
 from core.market_data.universe_models import Instrument, InstrumentUniverse
@@ -38,12 +50,178 @@ from core.notifications.alert_sink import AlertSink, ConsoleAlertSink
 from core.portfolio.allocation import build_portfolio_allocation_plan
 from core.portfolio.exit_models import ExitPolicyConfig, parse_time_of_day
 from core.portfolio.models import PortfolioAllocationPlan
-from core.risk.simple_intraday import SimpleIntradayRiskManager
+from core.risk.base import RiskManager
+from core.risk.options_margin import OptionsMarginRiskManager
+from core.risk.simple_intraday import (
+    DEFAULT_MIN_PROFIT_TO_BROKERAGE_RATIO_OVERRIDES,
+    IntradayRiskSettings,
+    SimpleIntradayRiskManager,
+)
 from core.strategy.base import MarketBar
+from core.utils.config_loader import load_yaml_file
+import core.strategy.credit_spread  # noqa: F401  (registers the strategy)
+import core.strategy.ma_crossover  # noqa: F401  (registers the strategy)
+import core.strategy.momentum  # noqa: F401  (registers the strategy)
+import core.strategy.options_mispricing  # noqa: F401  (registers the strategy)
+import core.strategy.pullback  # noqa: F401  (registers the strategy)
 import core.strategy.simple_breakout_momentum  # noqa: F401  (registers the strategy)
 
 MANDATE_PATH = "config/mandates/sample_mandate.yaml"
 UNIVERSE_PATH = "config/instruments/india_cash_universe.yaml"
+INDEX_UNIVERSE_PATH = "config/instruments/india_index_universe.yaml"
+APPROVED_CAPITAL_PATH = "config/mandates/approved_capital.yaml"
+ACTIVE_PORTFOLIO_PATH = "config/strategies/active_portfolio.yaml"
+
+
+def load_strategy_config(path: str) -> tuple[str, dict, CandidateProfile]:
+    """
+    Load ``(strategy_name, strategy_params, candidate_profile)`` from a
+    ``config/strategies/*.yaml`` file (see e.g.
+    ``config/strategies/simple_breakout_momentum.yaml``).
+
+    ``candidate_profile:`` is an optional block in that file - its
+    absence means ``CandidateProfile()``'s all-no-op defaults, i.e. the
+    session's daily candidate selection behaves exactly as it did before
+    this concept existed (generic affordability/volatility ceiling only,
+    source-order truncation).
+    """
+    raw = load_yaml_file(path)
+    strategy_name = raw["strategy"]["name"]
+    strategy_params = raw.get("params", {})
+    candidate_profile = CandidateProfile(**raw.get("candidate_profile", {}))
+    return strategy_name, strategy_params, candidate_profile
+
+
+class MultiDayHoldingNotSupportedError(RuntimeError):
+    """
+    Raised when the selected strategy's own design assumes holding a
+    position across multiple days (e.g. vertical_credit_spread selling
+    premium against a multi-day expiry to capture theta decay), but this
+    platform has no cross-session position/state persistence and forces
+    every position flat via ``square_off_time`` before the process exits
+    (``core.execution.orchestrator``'s ``PositionManager``/session
+    guardrails are rebuilt from scratch every session; per
+    ``core/backtest/day_runner.py``'s own docstring, "positions and daily
+    counters never carry across days" there either).
+
+    Silently running such a strategy same-day-only would produce trades
+    that don't reflect its actual economics (no time for meaningful theta
+    decay) - exactly the kind of result that could look like a validated
+    forward/paper-test outcome while actually testing something else
+    entirely. Whether to eventually build real cross-day persistence, or
+    redesign the strategy to be genuinely intraday, is a real decision -
+    not something to route around here by quietly letting it run wrong.
+    """
+
+
+# Strategies whose own design assumes holding a position across multiple
+# days - see MultiDayHoldingNotSupportedError. A small explicit set, not
+# a generic "any strategy with a *_days param over N" heuristic, which
+# would be fragile/wrong for unrelated day-denominated params on other
+# strategies.
+# ponytail: a hardcoded set is fine for exactly the one known case today;
+# if a second multi-day strategy shows up, promote this to a declared
+# field the strategy's own YAML sets instead of growing this list blindly.
+_STRATEGIES_REQUIRING_MULTI_DAY_HOLD = {"vertical_credit_spread"}
+
+
+def check_holding_period_is_supported(strategy_name: str) -> None:
+    """Raise ``MultiDayHoldingNotSupportedError`` if ``strategy_name`` needs a holding period this platform can't provide."""
+    if strategy_name in _STRATEGIES_REQUIRING_MULTI_DAY_HOLD:
+        raise MultiDayHoldingNotSupportedError(
+            f"'{strategy_name}' is designed to hold a position across multiple "
+            "days, but this platform forces every position flat the same day "
+            "it was opened (square_off_time) and has no cross-session state "
+            "persistence - running it today would silently produce same-day "
+            "round-trips that don't reflect the strategy's actual economics. "
+            f"See docs/strategy-specs/{strategy_name}.md before enabling it."
+        )
+
+
+# Strategies whose own documented design requires relying on
+# square_off_time alone - see core/strategy/credit_spread.py:96-98 (a
+# generic flat stop_loss_pct/target_pct on one leg of a spread can
+# de-hedge it into a naked/orphaned position) and
+# core/strategy/options_mispricing.py's docstring (square_off_time is
+# "the only thing that keeps a naked write's tail risk bounded" here -
+# a flat % band calibrated for cash-equity price moves is neither
+# validated nor meaningful against option-premium dynamics). Every other
+# strategy keeps the platform's generic 1.5%/2.0% default.
+_STRATEGIES_NEEDING_SQUARE_OFF_ONLY_EXITS = {"vertical_credit_spread", "options_mispricing"}
+
+# Strategies whose entries are gated by real statistical-significance
+# testing (see core/pricing/ornstein_uhlenbeck.py) structurally tend to
+# fire on modest, real deviations, not dramatic ones - measured at
+# ~0.4-0.7% in backtesting (see docs/strategy-specs/ornstein_uhlenbeck.md's
+# "v1 backtest finding"). The platform's generic 1.5%/2.0% band was sized
+# for the continuation strategies' bigger moves and left EVERY trade
+# exiting via square-off instead of ever registering a stop or target -
+# confirmed across two independent entry equations (18/18, then 2/2, then
+# 5/5 - see that memory/spec doc), not a one-off. (stop_loss_pct, target_pct).
+_STRATEGIES_NEEDING_TIGHT_MEAN_REVERSION_EXITS: dict[str, tuple[float, float]] = {
+    "ornstein_uhlenbeck": (0.7, 0.4),
+    "ornstein_uhlenbeck_residual": (0.7, 0.4),
+}
+
+# gbm_momentum's own significance test (core/pricing/gbm_drift.py) has
+# the same structural tendency as the OU strategies' - gating on real
+# statistical significance means it should also find modest, not
+# dramatic, drifts. First guess here (0.8/1.0) was measured, not assumed,
+# to be wrong: a 247-day backtest produced 19 trades with a MAXIMUM
+# absolute move of 0.57% and a median of 0.18% - every single one landed
+# well inside an 0.8%/1.0% band and exited via square-off, the identical
+# failure mode the OU strategies hit first. Retuned to the measured
+# distribution. Still worth re-checking if the entry criteria
+# (lookback_bars, min_t_stat) change enough to shift typical move size.
+_STRATEGIES_NEEDING_TIGHT_MOMENTUM_EXITS: dict[str, tuple[float, float]] = {
+    "gbm_momentum": (0.35, 0.2),
+}
+
+
+def build_exit_policy_for_strategy(strategy_name: str, square_off_time: time | None) -> ExitPolicyConfig:
+    """
+    Build the ``ExitPolicyConfig`` for one strategy's session.
+
+    Every strategy shares the same flat 1.5%/2.0% stop-loss/target
+    default except the ones in ``_STRATEGIES_NEEDING_SQUARE_OFF_ONLY_EXITS``
+    (see that set's docstring for why applying the generic default to
+    them would be actively wrong, not just imprecise) and
+    ``_STRATEGIES_NEEDING_TIGHT_MEAN_REVERSION_EXITS``/
+    ``_STRATEGIES_NEEDING_TIGHT_MOMENTUM_EXITS`` (see those dicts'
+    docstrings - a different problem, the generic band being too WIDE to
+    ever reach, not wrong in kind).
+    """
+    if strategy_name in _STRATEGIES_NEEDING_SQUARE_OFF_ONLY_EXITS:
+        return ExitPolicyConfig(square_off_time=square_off_time)
+    if strategy_name in _STRATEGIES_NEEDING_TIGHT_MEAN_REVERSION_EXITS:
+        stop_loss_pct, target_pct = _STRATEGIES_NEEDING_TIGHT_MEAN_REVERSION_EXITS[strategy_name]
+        return ExitPolicyConfig(stop_loss_pct=stop_loss_pct, target_pct=target_pct, square_off_time=square_off_time)
+    if strategy_name in _STRATEGIES_NEEDING_TIGHT_MOMENTUM_EXITS:
+        stop_loss_pct, target_pct = _STRATEGIES_NEEDING_TIGHT_MOMENTUM_EXITS[strategy_name]
+        return ExitPolicyConfig(stop_loss_pct=stop_loss_pct, target_pct=target_pct, square_off_time=square_off_time)
+    # NOT ATR-based: measured against real 1-minute data, a 14-bar ATR is
+    # ~14x tighter than this flat 1.5% stop, causing near-universal
+    # premature stop-outs - reverted once measured to be actively harmful,
+    # not a theoretical concern (see the practicality-audit memory for
+    # the full before/after numbers).
+    return ExitPolicyConfig(stop_loss_pct=1.5, target_pct=2.0, square_off_time=square_off_time)
+
+
+def load_active_portfolio(path: str) -> list[str]:
+    """
+    Load the list of ``config/strategies/*.yaml`` paths currently active
+    in the autonomous portfolio (see ``config/strategies/active_portfolio.yaml``).
+
+    A plain, git-tracked deploy list, not a second human-approval
+    ceremony - the human's only approval gate is the total capital in
+    ``config/mandates/approved_capital.yaml``. An empty or missing list
+    raises rather than silently running zero strategies.
+    """
+    raw = load_yaml_file(path)
+    strategies = raw.get("strategies") if isinstance(raw, dict) else None
+    if not strategies:
+        raise ValueError(f"{path} must set a non-empty 'strategies' list")
+    return list(strategies)
 
 
 class LiveTransportNotReadyError(RuntimeError):
@@ -52,6 +230,21 @@ class LiveTransportNotReadyError(RuntimeError):
     universe, broker factory, orchestrator) but the selected broker's
     real transport is not implemented yet, so no live order could
     actually be placed.
+    """
+
+
+class KiteTokenExpiredError(RuntimeError):
+    """
+    Raised when Kite rejects this session's ``KITE_ACCESS_TOKEN`` as
+    expired/invalid, detected as early as possible (at the reconciliation
+    preflight check, before any position sizing or order placement).
+
+    Kite's daily 6 AM IST token expiry means this is expected to happen
+    the first time a session runs after a human forgets the morning
+    ``scripts/kite_generate_access_token.py`` step - previously this
+    surfaced as a raw, easy-to-miss ``KiteAuthenticationError`` deep in
+    the reconciliation check; this translates it into an explicit,
+    actionable failure instead.
     """
 
 
@@ -93,6 +286,8 @@ class LiveSessionContext:
     allocation_plan: PortfolioAllocationPlan
     universe: InstrumentUniverse
     candidate_instruments: list[Instrument]
+    prescreen_result: PrescreenResult | None
+    used_precomputed_selection: bool
     bucket_result: BucketSelectionResult
     session_instruments: list[Instrument]
     session_symbols: list[str]
@@ -102,124 +297,6 @@ class LiveSessionContext:
     market_data_config: MarketDataConfig
     orchestrator: ExecutionOrchestrator
     session_config: TradingSessionConfig
-
-
-# (open_delta, high_delta, low_delta, close_delta, volume) per bar,
-# relative to each instrument's base_price: 5 quiet consolidation bars
-# (stable, highs capped around +5) establishing a real reference high,
-# then a breakout bar (closes above that reference high, volume spike),
-# then a bar that rallies well past the exit engine's profit target.
-# 5 quiet bars matches simple_breakout_momentum's default
-# breakout_lookback_bars=5 (see that module's docstring) - fewer bars of
-# history than the lookback needs and the strategy never fires at all.
-_DEMO_BAR_SHAPE: list[tuple[float, float, float, float, float]] = [
-    (-2.0, 3.0, -8.0, -1.0, 90000),
-    (-1.0, 4.0, -7.0, 0.0, 92000),
-    (-2.0, 5.0, -8.0, 1.0, 91000),
-    (-1.0, 3.0, -6.0, -1.0, 93000),
-    (0.0, 4.0, -7.0, 0.0, 90000),
-    (0.0, 25.0, -3.0, 20.0, 160000),  # breakout: closes above the ~+5 reference high
-    (22.0, 225.0, 15.0, 220.0, 120000),  # rallies well past the profit target
-]
-
-
-def build_session_bars(instruments: list[Instrument]) -> list[MarketBar]:
-    """
-    Build a small deterministic, interleaved multi-symbol intraday bar
-    stream, standing in for a live feed.
-
-    This is the same demo shape used by the paper trader (see
-    ``_DEMO_BAR_SHAPE``: 5 quiet consolidation bars, a breakout bar, then
-    a bar that rallies past the exit engine's profit target, per
-    instrument at a distinct price level). Used only for the safe
-    local/dev market-data path (``LIVE_MARKET_DATA_PROVIDER=memory``, the
-    default) - see ``_build_market_data_config``. The real live path
-    (``LIVE_MARKET_DATA_PROVIDER=groww``) uses ``GrowwLiveMarketDataFeed``
-    instead and never touches these bars.
-    """
-    base_time = datetime.now().replace(second=0, microsecond=0)
-    bars: list[MarketBar] = []
-
-    for offset, (open_delta, high_delta, low_delta, close_delta, volume) in enumerate(_DEMO_BAR_SHAPE):
-        timestamp = base_time + timedelta(minutes=offset)
-        for index, instrument in enumerate(instruments):
-            base_price = 500.0 + index * 300.0
-
-            bars.append(
-                MarketBar(
-                    symbol=instrument.symbol,
-                    exchange=instrument.exchange,
-                    timestamp=timestamp,
-                    open=base_price + open_delta,
-                    high=base_price + high_delta,
-                    low=base_price + low_delta,
-                    close=base_price + close_delta,
-                    volume=volume,
-                )
-            )
-
-    return bars
-
-
-def _build_candidate_market_data_config(
-    live_config: LiveTraderConfig,
-    candidate_instruments: list[Instrument],
-    groww_credentials: GrowwEnvCredentials | None,
-    kite_credentials: KiteEnvCredentials | None,
-) -> MarketDataConfig:
-    """
-    Build the ``MarketDataConfig`` covering every *candidate* instrument,
-    used only to fetch the price history bucket selection needs - mirrors
-    ``apps/paper_trader/main.py``'s identical helper.
-
-    ``"groww"``/``"kite"`` fetch a short window of real historical
-    candles (``live_config.historical_from_date``/``to_date``/``interval``)
-    purely for this affordability/volatility read - the session itself
-    still streams live quotes separately (see
-    ``_build_market_data_config``). ``"memory"`` reuses the same
-    synthetic demo bars the session falls back to, so bucket selection
-    runs identically (just against synthetic data) with no network
-    access at all.
-    """
-    if live_config.market_data_provider == "groww":
-        return MarketDataConfig(
-            provider="groww",
-            mode="historical",
-            metadata={
-                "api_key": groww_credentials.api_key,
-                "secret": groww_credentials.secret,
-                "instruments": [
-                    {"symbol": instrument.symbol, "exchange": instrument.exchange}
-                    for instrument in candidate_instruments
-                ],
-                "from_date": live_config.historical_from_date,
-                "to_date": live_config.historical_to_date,
-                "interval": live_config.historical_interval,
-            },
-        )
-
-    if live_config.market_data_provider == "kite":
-        return MarketDataConfig(
-            provider="kite",
-            mode="historical",
-            metadata={
-                "api_key": kite_credentials.api_key,
-                "access_token": kite_credentials.access_token,
-                "instruments": [
-                    {"symbol": instrument.symbol, "exchange": instrument.exchange}
-                    for instrument in candidate_instruments
-                ],
-                "from_date": live_config.historical_from_date,
-                "to_date": live_config.historical_to_date,
-                "interval": live_config.historical_interval,
-            },
-        )
-
-    return MarketDataConfig(
-        provider="memory",
-        mode="paper",
-        metadata={"bars": build_session_bars(candidate_instruments)},
-    )
 
 
 def _ensure_live_transport_ready(broker: Broker) -> None:
@@ -292,20 +369,36 @@ def _build_market_data_config(
     session_instruments: list[Instrument],
     groww_credentials: GrowwEnvCredentials | None,
     kite_credentials: KiteEnvCredentials | None,
+    angelone_credentials: AngelOneEnvCredentials | None = None,
 ) -> MarketDataConfig:
     """
     Build the ``MarketDataConfig`` for ``live_config.market_data_provider``.
 
-    ``"groww"``/``"kite"`` are the real live paths: reuse the same
-    credentials already loaded for the broker check (one account, one
-    set of credentials, no separate market-data-only env vars to
-    manage), and honor ``live_config.max_bars`` as a poll-count cap if
-    set. ``"memory"`` is the safe local/dev path: deterministic demo
-    bars, no network, no credentials required. This is never a silent
-    fallback - which path runs is decided entirely by ``LiveTraderConfig``
-    before this function is called, and the chosen provider is always
-    printed in the startup banner.
+    ``"groww"``/``"kite"``/``"angelone"`` are the real live paths: reuse
+    the same credentials already loaded for the broker check (one
+    account, one set of credentials, no separate market-data-only env
+    vars to manage), and honor ``live_config.max_bars`` as a poll-count
+    cap if set. Angel One's live feed is LTP-only (no volume/real
+    trade-timestamp - see ``core/market_data/angelone_live_feed.py``).
+    ``"memory"`` is the safe local/dev path: deterministic demo bars, no
+    network, no credentials required. This is never a silent fallback -
+    which path runs is decided entirely by ``LiveTraderConfig`` before
+    this function is called, and the chosen provider is always printed
+    in the startup banner.
     """
+    if live_config.market_data_provider == "angelone":
+        angelone_metadata: dict[str, object] = {
+            "api_key": angelone_credentials.api_key,
+            "client_code": angelone_credentials.client_code,
+            "password": angelone_credentials.password,
+            "totp_secret": angelone_credentials.totp_secret,
+        }
+        if live_config.max_bars is not None:
+            angelone_metadata["max_polls"] = live_config.max_bars
+
+        angelone_mode = "live_candles" if live_config.angelone_live_mode == "candles" else "live"
+        return MarketDataConfig(provider="angelone", mode=angelone_mode, metadata=angelone_metadata)
+
     if live_config.market_data_provider == "groww":
         metadata: dict[str, object] = {
             "api_key": groww_credentials.api_key,
@@ -374,9 +467,15 @@ def build_live_session(
             "LIVE_ALLOW_UNCLEAN_PRIOR_SESSION=true."
         )
 
-    # 1) load today's mandate and derive the day's allocation plan
+    # 1) load today's mandate and derive the day's allocation plan, and
+    #    which strategy this session runs (see load_strategy_config) -
+    #    both are pure local-file reads, no credential/broker call needed.
     mandate = load_daily_mandate(mandate_path)
     allocation_plan = build_portfolio_allocation_plan(mandate)
+    strategy_name, strategy_params, candidate_profile = load_strategy_config(
+        live_config.strategy_config_path
+    )
+    check_holding_period_is_supported(strategy_name)
 
     # 2) load the configured instrument universe and select this
     #    session's CANDIDATE instruments - every enabled instrument on the
@@ -390,11 +489,11 @@ def build_live_session(
         universe, UniverseSelectionCriteria(exchange=live_config.universe_exchange)
     )
 
-    # 3) load Groww/Kite credentials ONLY if the selected broker or
-    #    market-data provider actually needs them - paper+memory needs
-    #    none at all, and the two provider's credentials are never both
-    #    needed at once (see _ALLOWED_PROVIDER_COMBINATIONS - "groww" and
-    #    "kite" never mix within one session).
+    # 3) load Groww/Kite/Angel One credentials ONLY if the selected
+    #    broker or market-data provider actually needs them - paper+memory
+    #    needs none at all, and no session ever needs more than one of
+    #    these three at once (see _ALLOWED_PROVIDER_COMBINATIONS - Angel
+    #    One only ever pairs with the paper broker, never groww/kite).
     groww_credentials: GrowwEnvCredentials | None = None
     if live_config.requires_groww_credentials:
         groww_credentials = load_groww_credentials_from_env()
@@ -402,6 +501,10 @@ def build_live_session(
     kite_credentials: KiteEnvCredentials | None = None
     if live_config.requires_kite_credentials:
         kite_credentials = load_kite_credentials_from_env()
+
+    angelone_credentials: AngelOneEnvCredentials | None = None
+    if live_config.requires_angelone_credentials:
+        angelone_credentials = load_angelone_credentials_from_env()
 
     # 4) build the broker through the broker factory - never by
     #    instantiating a concrete broker class directly.
@@ -418,7 +521,15 @@ def build_live_session(
     #    site - the reconciliation result is still surfaced via the
     #    startup banner, and a raised UnreconciledPositionsError is still
     #    captured by run_live_session()'s existing failure handling.
-    reconciliation = check_broker_reconciliation(broker)
+    try:
+        reconciliation = check_broker_reconciliation(broker)
+    except KiteAuthenticationError as exc:
+        raise KiteTokenExpiredError(
+            "Refusing to start: Kite rejected this session's KITE_ACCESS_TOKEN as "
+            "expired/invalid (Kite tokens expire at 6 AM IST daily - a regulatory "
+            "requirement, not a bug). Run scripts/kite_generate_access_token.py to "
+            f"refresh it, then run again. Underlying error: {exc}"
+        ) from exc
     if not reconciliation.is_clean and not live_config.allow_unreconciled_positions:
         positions_desc = ", ".join(
             f"{p.exchange}:{p.symbol} qty={p.quantity}" for p in reconciliation.unexpected_positions
@@ -431,29 +542,53 @@ def build_live_session(
             "LIVE_ALLOW_UNRECONCILED_POSITIONS=true to proceed anyway."
         )
 
-    # 4.7) select the day's tradable bucket from the candidates: the same
-    #    capital-affordability + risk-appetite volatility screen the paper
-    #    trader already applies (see core/market_data/bucket_selector.py) -
-    #    previously skipped here entirely, meaning a live session could
-    #    trade a symbol paper trading would have excluded as unaffordable
-    #    or too volatile for the day's risk appetite. Uses the credentials
-    #    already loaded in step 3 - no separate credential path.
-    candidate_market_data_config = _build_candidate_market_data_config(
-        live_config, candidate_instruments, groww_credentials, kite_credentials
-    )
-    candidate_feed = build_market_data_feed(candidate_market_data_config)
-    price_history = {
-        instrument.symbol: candidate_feed.get_history(instrument.symbol)
-        for instrument in candidate_instruments
-    }
-    bucket_criteria = BucketSelectionCriteria(
-        risk_appetite=mandate.risk_appetite,
-        max_capital_per_trade=allocation_plan.max_capital_per_trade,
-        max_bucket_size=allocation_plan.max_open_positions,
-    )
-    bucket_result = CapitalRiskBucketSelector().select(
-        candidate_instruments, price_history, bucket_criteria
-    )
+    # 4.6/4.7) decide today's tradable bucket - either read it from an
+    #    overnight-precomputed selection (see
+    #    apps/live_trader/select_candidates_main.py, meant to run well
+    #    before market open so this expensive step - Angel One prescreen
+    #    + historical fetch + bucket selection, up to an hour+ against
+    #    the full NSE universe - doesn't eat into the trading day), or,
+    #    if none was saved for today, do it live right now (the original
+    #    behavior, unchanged - see
+    #    apps/live_trader/candidate_selection.py's select_session_instruments).
+    #    Tries the strategy-specific file first (see
+    #    core/market_data/candidate_selection_store.py), falling back to
+    #    the legacy shared file so a strategy without its own overnight
+    #    run yet still gets a fast path rather than always selecting live.
+    prescreen_result: PrescreenResult | None = None
+    persisted_selection: CandidateSelection | None = None
+    if candidate_profile.fixed_universe_segment is not None:
+        # A small, always-on set (e.g. NIFTY/BANKNIFTY for an options
+        # strategy - see CandidateProfile.fixed_universe_segment's
+        # docstring) - skip the whole overnight-selection/prescreen/
+        # bucket-selection pipeline below entirely, it exists to pick
+        # which of thousands of cash-equity candidates to trade today
+        # under a capital constraint, which doesn't apply here.
+        index_universe = load_instrument_universe(INDEX_UNIVERSE_PATH)
+        candidate_instruments = TradingUniverseSelector().select(
+            index_universe, UniverseSelectionCriteria(segment=candidate_profile.fixed_universe_segment)
+        )
+        bucket_result = BucketSelectionResult(selected=candidate_instruments)
+    else:
+        persisted_selection = load_candidate_selection(
+            allocation_plan.trading_date, strategy_name=strategy_name
+        )
+        if persisted_selection is None:
+            persisted_selection = load_candidate_selection(allocation_plan.trading_date)
+        if persisted_selection is not None:
+            candidate_instruments = persisted_selection.instruments
+            bucket_result = BucketSelectionResult(selected=persisted_selection.instruments)
+        else:
+            candidate_instruments, prescreen_result, bucket_result = select_session_instruments(
+                live_config,
+                candidate_instruments,
+                mandate,
+                allocation_plan,
+                groww_credentials,
+                kite_credentials,
+                angelone_credentials,
+                candidate_profile,
+            )
     session_instruments = bucket_result.selected
     session_symbols = [instrument.symbol for instrument in session_instruments]
 
@@ -466,15 +601,77 @@ def build_live_session(
     #    bucket's instruments, matching apps/paper_trader/main.py's same
     #    "empty bucket subscribes to nothing" reasoning.
     market_data_config = _build_market_data_config(
-        live_config, session_instruments, groww_credentials, kite_credentials
+        live_config, session_instruments, groww_credentials, kite_credentials, angelone_credentials
     )
     market_data_feed = build_market_data_feed(market_data_config)
 
     market_data_service = MarketDataService()
     market_data_service.register_feed("live_session", market_data_feed)
 
-    # 6) initialize the remaining dependencies
-    risk_manager = SimpleIntradayRiskManager()
+    # 6) initialize the remaining dependencies. A real live broker gets its
+    #    naked-write opens margin-checked against that broker's own real
+    #    margin endpoint before SimpleIntradayRiskManager's approval is
+    #    honored - OptionsMarginRiskManager fails safe (rejects) if this
+    #    were wired in without a MarginCalculator at all. "paper" gets the
+    #    same fail-closed gate too, but backed by EstimatedSpanMarginCalculator
+    #    (a naive simulation, not a real margin endpoint - see its
+    #    docstring) rather than left unwired entirely: Stage 3 paper
+    #    trading has no real margin to check, but a naked-write strategy
+    #    still needs its margin-rejection path exercised by something
+    #    before it ever reaches live (see docs/architecture.md's staged
+    #    Research -> Backtest -> Paper -> Live philosophy).
+    base_risk_manager = SimpleIntradayRiskManager(
+        IntradayRiskSettings(
+            min_profit_to_brokerage_ratio_by_strategy=DEFAULT_MIN_PROFIT_TO_BROKERAGE_RATIO_OVERRIDES
+        )
+    )
+    broker_transport = getattr(broker, "transport", None)
+    available_margin: float | None = None
+    if broker_config.provider == "kite" and broker_transport is not None:
+        risk_manager: RiskManager = OptionsMarginRiskManager(
+            base_risk_manager, margin_calculator=KiteMarginCalculator(broker_transport)
+        )
+        # Fetched once, eagerly, at session start (not lazily like the
+        # margin calculator above, whose calls are deferred to per-signal
+        # evaluation time) - a bad/expired token or transport failure
+        # surfaces now, consistent with this function's other fail-fast
+        # preflight checks (reconciliation, live-transport-ready), rather
+        # than confusingly on the first naked-write signal mid-session.
+        available_margin = fetch_available_margin(broker_transport)
+        # A separate KiteMarketDataTransport (not broker_transport, which
+        # only handles order/margin calls) since option-chain data is a
+        # market-data concern - mirrors this codebase's existing
+        # broker-transport/market-data-transport split. Injected
+        # unconditionally into strategy_params: harmless (an unused dict
+        # key) for a cash-equity strategy, and the only way an
+        # options-based strategy's option_chain_provider param (see
+        # core.strategy.options_mispricing's docstring) is ever populated
+        # - before this, no app constructed one at all.
+        strategy_params["option_chain_provider"] = KiteOptionChainProvider(
+            KiteMarketDataTransport(
+                KiteMarketDataTransportConfig(
+                    credentials=KiteMarketDataCredentials(
+                        api_key=kite_credentials.api_key, access_token=kite_credentials.access_token
+                    )
+                )
+            ),
+            risk_free_rate=float(strategy_params.get("risk_free_rate", 0.07)),
+        )
+    elif broker_config.provider == "groww" and broker_transport is not None:
+        risk_manager = OptionsMarginRiskManager(
+            base_risk_manager, margin_calculator=GrowwMarginCalculator(broker_transport)
+        )
+    elif broker_config.provider == "paper":
+        # Same paper-only margin simulation as apps/paper_trader/main.py -
+        # a naked-write-open run through live_trader with provider="paper"
+        # must exercise the same fail-closed gate a real Kite/Groww
+        # session would, not be silently approved on capital-sizing alone.
+        risk_manager = OptionsMarginRiskManager(
+            base_risk_manager, margin_calculator=EstimatedSpanMarginCalculator()
+        )
+        available_margin = allocation_plan.intraday_capital
+    else:
+        risk_manager = base_risk_manager
 
     orchestrator = ExecutionOrchestrator(
         market_data_service=market_data_service,
@@ -494,16 +691,23 @@ def build_live_session(
         if mandate.risk_limits.force_square_off_at
         else None
     )
-    exit_policy = ExitPolicyConfig(stop_loss_pct=1.5, target_pct=2.0, square_off_time=square_off_time)
+    # See build_exit_policy_for_strategy's docstring: most strategies get
+    # a flat 1.5%/2.0% stop-loss/target (deliberately NOT ATR-based - a
+    # prior pass measured that as actively harmful on real 1-minute bars,
+    # see the practicality-audit memory), but a strategy whose own design
+    # requires square_off_time alone gets exactly that instead.
+    exit_policy = build_exit_policy_for_strategy(strategy_name, square_off_time)
 
     session_config = TradingSessionConfig(
         trading_date=allocation_plan.trading_date,
-        strategy_name="simple_breakout_momentum",
-        strategy_params={},
+        strategy_name=strategy_name,
+        strategy_params=strategy_params,
         execution_mode=broker_config.mode,
         symbols=session_symbols,
         portfolio_allocation_plan=allocation_plan,
         exit_policy=exit_policy,
+        broker_algo_tag=live_config.broker_algo_id,
+        available_margin=available_margin,
     )
 
     return LiveSessionContext(
@@ -511,6 +715,8 @@ def build_live_session(
         allocation_plan=allocation_plan,
         universe=universe,
         candidate_instruments=candidate_instruments,
+        prescreen_result=prescreen_result,
+        used_precomputed_selection=persisted_selection is not None,
         bucket_result=bucket_result,
         session_instruments=session_instruments,
         session_symbols=session_symbols,
@@ -549,6 +755,26 @@ def print_startup_banner(ctx: LiveSessionContext) -> None:
         )
         print(f"Reconciliation: UNRECONCILED, proceeding anyway (allowed) - {positions_desc}")
     print()
+
+    if ctx.used_precomputed_selection:
+        print("=== CANDIDATE SELECTION: using overnight precomputed selection ===")
+        print(f"({len(ctx.session_symbols)} symbols - skipped live prescreen/historical fetch/bucket selection)")
+        print()
+
+    if ctx.prescreen_result is not None:
+        pre = ctx.prescreen_result
+        total_screened = (
+            len(pre.survivors)
+            + len(pre.excluded_price_unavailable)
+            + len(pre.excluded_unaffordable)
+            + len(pre.excluded_no_news)
+        )
+        print("=== CANDIDATE PRESCREEN ===")
+        print(f"Screened ({total_screened}), survived to bucket selection ({len(pre.survivors)})")
+        print(f"  excluded unaffordable: {len(pre.excluded_unaffordable)}")
+        print(f"  excluded no qualifying news: {len(pre.excluded_no_news)}")
+        print(f"  excluded no price data: {len(pre.excluded_price_unavailable)}")
+        print()
 
     print("=== BUCKET SELECTION ===")
     print(f"Candidates considered ({len(ctx.candidate_instruments)}): "

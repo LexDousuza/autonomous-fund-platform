@@ -1,0 +1,21 @@
+# Research-only multi-strategy roster for historical portfolio backtesting
+# (apps/backtester/run_portfolio_backtest.py) - separate from
+# config/strategies/active_portfolio.yaml, which is the live/paper
+# production deploy list and stays untouched by this file. Growing THIS
+# list has no bearing on what trades with real or paper capital.
+#
+# Every strategy here trades plain OHLCV cash-equity bars only, so it can
+# run against the offline historical CSVs in data/processed/ without a
+# live option-chain provider or news feed:
+# - vertical_credit_spread and options_mispricing need a live Kite option
+#   chain (no historical chain data is wired into backtesting yet), and
+#   vertical_credit_spread is separately blocked outright by
+#   MultiDayHoldingNotSupportedError (see apps/live_trader/main.py).
+# - news_sentiment_signal needs a live news feed.
+strategies:
+  - config/strategies/simple_breakout_momentum.yaml
+  - config/strategies/momentum.yaml
+  - config/strategies/ma_crossover.yaml
+  - config/strategies/pullback.yaml
+  - config/strategies/relative_volume_pullback.yaml
+  - config/strategies/vwap_reversion.yaml

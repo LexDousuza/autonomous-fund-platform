@@ -52,6 +52,12 @@ class FakeGrowwClient:
     def get_positions_for_user(self, **kwargs):
         return self._record("get_positions_for_user", kwargs)
 
+    def get_order_margin_details(self, **kwargs):
+        return self._record("get_order_margin_details", kwargs)
+
+    def get_available_margin_details(self, **kwargs):
+        return self._record("get_available_margin_details", kwargs)
+
 
 def make_transport(client: FakeGrowwClient | None = None) -> tuple[GrowwHttpTransport, FakeGrowwClient]:
     client = client or FakeGrowwClient()
@@ -128,6 +134,15 @@ class GrowwHttpTransportSuccessPathTests(unittest.TestCase):
         self.assertEqual(kwargs["groww_order_id"], "GRW-2")
         self.assertEqual(kwargs["segment"], GrowwAPI.SEGMENT_CASH)
 
+    def test_place_order_forwards_explicit_fno_segment(self) -> None:
+        transport, client = make_transport()
+        client.responses["place_order"] = {"groww_order_id": "GRW-9", "order_status": "NEW"}
+
+        transport.place_order({"trading_symbol": "RELIANCE26AUG2600CE"}, segment=GrowwAPI.SEGMENT_FNO)
+
+        _, kwargs = client.calls[0]
+        self.assertEqual(kwargs["segment"], GrowwAPI.SEGMENT_FNO)
+
     def test_get_order_calls_get_order_detail_not_get_order_status(self) -> None:
         # get_order_status's verified response shape lacks symbol/exchange/
         # side/order_type/product/quantity - not enough to build an Order.
@@ -151,6 +166,37 @@ class GrowwHttpTransportSuccessPathTests(unittest.TestCase):
         name, kwargs = client.calls[0]
         self.assertEqual(name, "get_positions_for_user")
         self.assertEqual(kwargs["segment"], GrowwAPI.SEGMENT_CASH)
+
+    def test_list_positions_accepts_explicit_fno_segment(self) -> None:
+        transport, client = make_transport()
+        client.responses["get_positions_for_user"] = {"positions": []}
+
+        transport.list_positions(segment=GrowwAPI.SEGMENT_FNO)
+
+        _, kwargs = client.calls[0]
+        self.assertEqual(kwargs["segment"], GrowwAPI.SEGMENT_FNO)
+
+    def test_get_order_margin_details_forwards_orders_and_segment(self) -> None:
+        transport, client = make_transport()
+        client.responses["get_order_margin_details"] = {"total_requirement": 12500.0}
+        orders = [{"trading_symbol": "RELIANCE26AUG2600CE", "quantity": 250}]
+
+        result = transport.get_order_margin_details(orders, segment=GrowwAPI.SEGMENT_FNO)
+
+        self.assertEqual(result, {"total_requirement": 12500.0})
+        name, kwargs = client.calls[0]
+        self.assertEqual(name, "get_order_margin_details")
+        self.assertEqual(kwargs["orders"], orders)
+        self.assertEqual(kwargs["segment"], GrowwAPI.SEGMENT_FNO)
+
+    def test_get_available_margin_details_forwards_to_client(self) -> None:
+        transport, client = make_transport()
+        client.responses["get_available_margin_details"] = {"clear_cash": 50000.0}
+
+        result = transport.get_available_margin_details()
+
+        self.assertEqual(result, {"clear_cash": 50000.0})
+        self.assertEqual(client.calls[0][0], "get_available_margin_details")
 
 
 class GrowwHttpTransportErrorPathTests(unittest.TestCase):

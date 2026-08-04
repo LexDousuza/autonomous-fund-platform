@@ -16,7 +16,20 @@ __pycache__/
 data/live_sessions/
 data/alerts.log
 data/cron_logs/
+data/candidate_selection/
 
 # Real credentials for unattended cron runs - see .env.live_trader.example
 .env.live_trader
+
+# Third-party SmartApi SDK writes its own date-wise log file here
+# (SmartConnect.__init__ calls logzero.logfile("logs/<date>/app.log")) and
+# has logged raw Authorization/API-key headers on request failures - see
+# core/market_data/angelone_transport.py's logging hardening. Never commit
+# this even though it's mitigated in-process; defense in depth.
+logs/
+
+# 603MB, over GitHub's 100MB hard limit - regenerable from real NSE
+# bhavcopy data via scripts/fetch_historical_options_nse.py, not hand-
+# authored, so losing it from git costs nothing but a re-run.
+data/processed/nse_index_options_iv_history.csv
 

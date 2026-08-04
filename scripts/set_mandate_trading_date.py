@@ -27,6 +27,19 @@ _TRADING_DATE_LINE = re.compile(r'^trading_date:\s*"[^"]*"', re.MULTILINE)
 def main() -> None:
     target_date = sys.argv[1] if len(sys.argv) > 1 else date.today().isoformat()
 
+    # Not a real NSE/BSE holiday calendar (none exists in this platform
+    # yet) - just the one case that's always wrong regardless of any
+    # calendar: a cron job firing on a Saturday/Sunday would otherwise
+    # set trading_date to a day the exchange was never open at all, with
+    # no warning.
+    if date.fromisoformat(target_date).weekday() >= 5:
+        raise SystemExit(
+            f"Refusing to set trading_date to {target_date} - that's a "
+            "weekend (NSE/BSE don't trade Sat/Sun). This only catches the "
+            "always-wrong weekend case, not real exchange holidays (no "
+            "holiday calendar exists in this platform yet)."
+        )
+
     text = MANDATE_PATH.read_text(encoding="utf-8")
     new_text, replacements = _TRADING_DATE_LINE.subn(f'trading_date: "{target_date}"', text, count=1)
     if replacements == 0:

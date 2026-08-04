@@ -97,3 +97,21 @@ class CircuitBreaker:
         else:
             self._consecutive_failures = 0
             return result
+
+    @property
+    def is_open(self) -> bool:
+        """
+        Whether this circuit is currently open (failing fast), accounting
+        for cooldown elapsing - the same check ``call()`` makes, exposed
+        read-only for status/health reporting. Does NOT mutate state (a
+        real ``call()`` after cooldown elapses clears ``_opened_at`` to
+        let one trial call through; this getter just answers "is it open
+        right now" without side effects).
+        """
+        if self._opened_at is None:
+            return False
+        return self.clock() - self._opened_at < self.cooldown_seconds
+
+    @property
+    def consecutive_failures(self) -> int:
+        return self._consecutive_failures

@@ -1,0 +1,39 @@
+id: EXP-0012
+hypothesis: A new high over the last N bars (breakout) continues.
+economic_mechanism: >
+  A price break above a recent range, confirmed by a momentum/volume
+  filter, is hypothesized to signal a genuine regime shift (new
+  information or accumulating demand crossing a visible level) rather than
+  range-bound noise - the bet is that other breakout/momentum traders
+  extend the move once the level breaks. No dedicated spec doc exists;
+  mechanism reconstructed from `core/strategy/simple_breakout_momentum.py`'s
+  own docstring. Note (per validation_audit_phase1.md): this strategy's
+  prior tuning was synthetic-data-only - EXP-0012 is its first real-data
+  test, not a re-audit of a previously-real claim.
+
+dataset: data/processed/nse_5min_dev.csv
+period: {train_or_dev: "nse_5min_dev.csv, 123 trading days", holdout: null}
+parameters: {breakout_lookback_bars: 5, min_volume_multiplier: 1.0, quantity_per_trade: 5}
+
+bootstrap_ci: {point_estimate: 0.10075000522134663, lower: 0.07433137334429366, upper: 0.13000193840435115, n_resamples: 2000}
+p_value: 0.0
+fdr_corrected: true   # significant, but CI is below 1 (a confirmed loss, not a confirmed edge) - see reason below
+kill_criteria_result: {ci_lower_bound_above_1: false, fdr_p_under_threshold: true, holdout_drop_under_25pct: null, walk_forward_sign_consistent: null}
+
+git_commit: b32f494a980aa65e74b7e5753caa8dae3237e725
+config_version: config/strategies/simple_breakout_momentum.yaml
+data_snapshot_id: sha256:a172d0e259f144091bda8b63db988e755a97fb2245c7a9cb9a73dce1825f8177
+python_version: "3.14.2"
+random_seed: 0
+
+date_opened: 2026-07-28
+date_decided: 2026-07-28
+decision: fail
+reason: >
+  This strategy's only prior evaluation was on SYNTHETIC data (its own
+  config comment: "a multi-day synthetic backtest... not a real-market
+  performance claim"). This is its first real-data result: 653 trades
+  (most of any strategy tested this batch), CI [0.07, 0.13] far below 1,
+  p=0.0000 - a decisive, significant loss. The breakout_lookback_bars=5
+  parameter choice was tuned against synthetic noise, not real market
+  structure - unsurprising it doesn't transfer.

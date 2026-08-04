@@ -1,0 +1,24 @@
+strategy:
+  name: gbm_momentum
+
+# 5-minute-bar variant of gbm_momentum.yaml. lookback_bars=60 needs 300
+# minutes of history before it can fit anything - incompatible with
+# session_window_minutes=90 (60 5-minute bars alone take longer than the
+# window meant to cut entries off within), so that filter is disabled
+# here rather than left silently self-contradictory (the 1-minute
+# version doesn't have this problem: 60 1-minute bars = 60 minutes, which
+# fits inside a 90-minute window). See docs/strategy-specs/gbm_momentum.md's
+# "known limitations" - this tension (enough history for a real
+# statistical test vs. firing early enough to matter) is real, not
+# resolved here.
+params:
+  lookback_bars: 60
+  min_t_stat: 2.5
+  session_window_minutes: null
+  allow_multiple_entries: false
+
+candidate_profile:
+  require_liquidity_and_uptrend: true
+  min_avg_volume: 50000
+  trend_lookback_bars: 10
+  rank_by_volatility: true

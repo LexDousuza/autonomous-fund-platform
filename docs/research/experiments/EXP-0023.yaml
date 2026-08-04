@@ -1,0 +1,70 @@
+id: EXP-0023
+
+hypothesis: >
+  vertical_credit_spread (BANKNIFTY, PUT side) converts the measured VRP
+  (EXP-0002) into real, risk-defined strategy PnL at a 10-day max hold -
+  testing the same longer-hold lead as EXP-0021 (NIFTY), but
+  validation_audit_phase2.md's 2026-07-31 exploratory follow-up already
+  flagged that BANKNIFTY did NOT show NIFTY's rising pattern in the
+  single-window check (peaked at 7d/0.940, still <1, worse at 10d/0.831) -
+  this entry runs the full battery to confirm or overturn that single-window
+  read rather than rely on it.
+
+economic_mechanism: >
+  Same as EXP-0021/EXP-0004: same theta-decay-truncation hypothesis, tested
+  on BANKNIFTY's own measured premium (EXP-0002) instead of NIFTY's.
+
+dataset: data/processed/nse_index_options_iv_history.csv
+universe: [BANKNIFTY]
+period:
+  train_or_dev: "2016-01-01 to 2023-12-31 (252 trades): point=1.1702, CI=[0.8452,1.6665], p=0.4505 - fails"
+  holdout: "2024-01-01 to 2026-07-24 (56 trades): point=0.8312, CI=[0.3956,1.8845], p=0.709 - fails"
+
+parameters:
+  option_type: PUT
+  expiry_horizon_days: 7
+  short_leg_target_delta: 0.25
+  wing_offset_strikes: 2
+  iv_rv_ratio_threshold: 1.2
+  min_net_credit_pct_of_width: 10.0
+  historical_vol_lookback_bars: 20
+  max_holding_days: 10
+  capital: 5000000.0
+  per_leg_capital: 10000.0
+  lot_size: 75
+  slippage_bps: 5.0
+
+bootstrap_ci:
+  point_estimate: 0.831177850264564   # profit factor; 56 closed leg round-trips, HOLDOUT window
+  lower: 0.3956140431037752
+  upper: 1.884459649350895
+  n_resamples: 2000
+p_value: 0.709
+fdr_corrected: false   # not run alongside a broader FDR batch this round - see reason
+kill_criteria_result:
+  ci_lower_bound_above_1: false
+  fdr_p_under_threshold: false
+  holdout_drop_under_25pct: false   # holdout PF (0.831) vs dev PF (1.170): 29.0% drop - BREACHES the 25% threshold, a second independent kill criterion beyond CI/p
+  walk_forward_sign_consistent: false   # 0/8 walk-forward years reach significance; only 4/8 point estimates >1 (vs. NIFTY's 7/8 at the same hold) - closer to a coin flip than a lean
+
+git_commit: 7507cb254900f4f6106823bc6b02c06308d77c51
+config_version: config/strategies/vertical_credit_spread.yaml
+data_snapshot_id: sha256:e5781844a58c6f81b1d594ca5d695a2f94ee8c79a373fc80a8c1dacd9badba6b
+python_version: "3.14.2"
+random_seed: 0
+
+date_opened: 2026-08-03
+date_decided: 2026-08-03
+decision: fail
+reason: >
+  docs/research/validation_audit_phase2_longer_hold.md: full Phase 2
+  battery at a 10-day max hold confirms the 2026-07-31 single-window
+  exploratory read - BANKNIFTY does NOT show NIFTY's rising-point-estimate
+  pattern. Worse: the holdout PF (0.831) is 29.0% below the dev PF (1.170),
+  breaching the pre-registered 25% holdout-drop kill criterion outright -
+  an independent failure on top of CI/p, and one NIFTY's 10-day result
+  (13.3% drop) does not share. Walk-forward is also weaker/more mixed than
+  NIFTY (4/8 years >1, vs. 7/8). Reads as in-sample-only apparent
+  improvement that doesn't generalize, not a real longer-hold edge.
+
+  Should not proceed to Tier B as currently designed.

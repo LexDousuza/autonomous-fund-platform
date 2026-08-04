@@ -1,0 +1,18 @@
+strategy:
+  name: pullback
+
+params:
+  trend_lookback_bars: 20
+  pullback_lookback_bars: 3
+  min_pullback_pct: 0.3
+  allow_multiple_entries: false
+
+# Pullback needs candidates already in an established uptrend (same
+# uptrend check the strategy itself re-derives per-bar - see
+# core/strategy/pullback.py) - a name with no real trend to pull back
+# within isn't worth subscribing to at all.
+candidate_profile:
+  require_liquidity_and_uptrend: true
+  min_avg_volume: 50000
+  trend_lookback_bars: 20
+  rank_by_volatility: true

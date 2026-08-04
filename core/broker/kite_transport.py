@@ -207,3 +207,50 @@ class KiteHttpTransport:
         ``{"net": [...], "day": [...]}``.
         """
         return self._call("list_positions", lambda: self._client.positions(), retryable=True)
+
+    def get_instruments(self, exchange: str) -> list[dict[str, Any]]:
+        """
+        Fetch the full instrument master for ``exchange`` (e.g. ``"NFO"``)
+        - a bulk dump of every tradable contract, including strike/expiry/
+        lot size for options. Read-only; used by
+        ``core/market_data/kite_option_chain.py`` to resolve a real
+        tradingsymbol, never cached across calls here since Kite revises
+        this periodically (see this plan's decision that lot sizes/
+        symbols are always read fresh, never hardcoded).
+        """
+        return self._call(
+            "get_instruments", lambda: self._client.instruments(exchange), retryable=True
+        )
+
+    def get_margins(self, segment: str | None = None) -> dict[str, Any]:
+        """
+        Fetch account-level margin/balance details (distinct from
+        ``get_order_margins``, which prices one prospective order).
+
+        With ``segment`` set (e.g. ``"equity"``, which also covers NFO
+        equity F&O - Kite has no separate options segment), the SDK hits
+        the per-segment endpoint and returns that segment's balance dict
+        directly (``{"net": ..., "available": {...}, "utilised": {...}}``).
+        With ``segment=None``, it returns the full ``{"equity": {...},
+        "commodity": {...}}`` mapping instead. Verified against the
+        installed ``kiteconnect`` SDK's ``margins()`` branching, but - like
+        ``get_order_margins`` - not yet exercised against a real account.
+        """
+        return self._call(
+            "get_margins", lambda: self._client.margins(segment), retryable=True
+        )
+
+    def get_order_margins(self, orders: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """
+        Margin calculator for a list of prospective orders. ``orders``
+        items match ``KiteConnect.order_margins``'s expected per-order
+        shape (``exchange``/``tradingsymbol``/``transaction_type``/
+        ``variety``/``product``/``order_type``/``quantity``/``price``/
+        ``trigger_price``). Response is one entry per input order (unlike
+        Groww's aggregate-for-the-batch shape), each carrying a
+        ``total`` field for that order's required margin (verified:
+        https://kite.trade/docs/connect/v3/margins/).
+        """
+        return self._call(
+            "get_order_margins", lambda: self._client.order_margins(orders), retryable=True
+        )

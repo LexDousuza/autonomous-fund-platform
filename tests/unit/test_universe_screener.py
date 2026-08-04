@@ -13,7 +13,9 @@ from core.market_data.universe_models import Instrument
 from core.market_data.universe_screener import (
     InstrumentMasterScreeningCriteria,
     LiquidityTrendScreeningCriteria,
+    RelativeVolumeScreeningCriteria,
     screen_by_liquidity_and_trend,
+    screen_by_relative_volume,
     screen_instrument_master,
 )
 from core.strategy.base import MarketBar
@@ -167,6 +169,56 @@ class ScreenByLiquidityAndTrendTests(unittest.TestCase):
         second = screen_by_liquidity_and_trend([instrument], {"UP": bars}, criteria)
 
         self.assertEqual([i.symbol for i in first.selected], [i.symbol for i in second.selected])
+
+
+class ScreenByRelativeVolumeTests(unittest.TestCase):
+    def test_symbol_with_normal_recent_volume_is_excluded(self) -> None:
+        instrument = Instrument(symbol="FLAT", exchange="NSE")
+        # 11 days, flat volume every day - yesterday is not unusual at all.
+        bars = [_bar("FLAT", day, close=100.0, volume=10_000.0) for day in range(11)]
+
+        result = screen_by_relative_volume(
+            [instrument], {"FLAT": bars}, RelativeVolumeScreeningCriteria(relative_volume_multiplier=1.5, trailing_days=10)
+        )
+
+        self.assertEqual(result.selected, [])
+        self.assertEqual(result.excluded[0].reason, "not_in_play")
+
+    def test_symbol_with_a_volume_spike_yesterday_is_selected(self) -> None:
+        instrument = Instrument(symbol="SPIKE", exchange="NSE")
+        # 10 baseline days at 10,000, then a spike day at 20,000 (2x).
+        bars = [_bar("SPIKE", day, close=100.0, volume=10_000.0) for day in range(10)]
+        bars.append(_bar("SPIKE", 10, close=100.0, volume=20_000.0))
+
+        result = screen_by_relative_volume(
+            [instrument], {"SPIKE": bars}, RelativeVolumeScreeningCriteria(relative_volume_multiplier=1.5, trailing_days=10)
+        )
+
+        self.assertEqual([i.symbol for i in result.selected], ["SPIKE"])
+
+    def test_insufficient_history_is_excluded_not_silently_selected(self) -> None:
+        instrument = Instrument(symbol="NEW", exchange="NSE")
+        bars = [_bar("NEW", day, close=100.0, volume=50_000.0) for day in range(5)]  # fewer than trailing_days+1
+
+        result = screen_by_relative_volume(
+            [instrument], {"NEW": bars}, RelativeVolumeScreeningCriteria(relative_volume_multiplier=1.5, trailing_days=10)
+        )
+
+        self.assertEqual(result.selected, [])
+        self.assertEqual(result.excluded[0].reason, "insufficient_history")
+
+    def test_only_the_most_recent_day_is_judged_against_the_days_before_it(self) -> None:
+        # A spike 5 days ago, but yesterday itself was normal - must NOT
+        # select on the strength of a stale spike.
+        instrument = Instrument(symbol="STALE", exchange="NSE")
+        bars = [_bar("STALE", day, close=100.0, volume=10_000.0) for day in range(11)]
+        bars[5].volume = 50_000.0  # old spike, not the most recent day
+
+        result = screen_by_relative_volume(
+            [instrument], {"STALE": bars}, RelativeVolumeScreeningCriteria(relative_volume_multiplier=1.5, trailing_days=10)
+        )
+
+        self.assertEqual(result.selected, [])
 
 
 if __name__ == "__main__":

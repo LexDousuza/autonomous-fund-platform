@@ -55,7 +55,7 @@ def build_broker(config: BrokerConfig) -> Broker:
                 "Invalid broker config: provider='paper' only supports "
                 f"mode='paper' (got mode='{config.mode}')."
             )
-        return PaperBroker()
+        return PaperBroker(slippage_bps=config.metadata.get("slippage_bps", 0.0))
 
     if provider == "groww":
         return _build_groww_broker(config, mode)

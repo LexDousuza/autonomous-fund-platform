@@ -1,17 +1,4314 @@
 universe_name: india_cash_v1
 
+# Full NSE cash-equity list (2393 symbols), generated from Angel One's
+# public scrip master (margincalculator.angelone.in/OpenAPI_File/files/OpenAPIScripMaster.json),
+# filtered to exch_seg="NSE", instrumenttype="" (plain cash equity, same filter
+# core/market_data/angelone_transport.py uses), symbol ending "-EQ", excluding NSE's
+# own *NSETEST dummy entries. Regenerate by re-running that same filter if the
+# universe needs refreshing later - see docs/runbooks (or ask Claude).
+
 instruments:
-  - symbol: RELIANCE
+  - symbol: 20MICRONS
     exchange: NSE
     segment: CASH
     enabled: true
 
-  - symbol: TCS
+  - symbol: 21STCENMGM
     exchange: NSE
     segment: CASH
     enabled: true
 
-  - symbol: INFY
+  - symbol: 360ONE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: 3BBLACKBIO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: 3IINFOLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: 3MINDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: 3PLAND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: 5PAISA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: 63MOONS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: A2ZINFRA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AAATECH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AADHARHFC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AAKASH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AARNAV
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AARON
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AARTIDRUGS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AARTIIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AARTIPHARM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AARTISURF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AARVI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AASTHA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AAVAS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ABB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ABBOTINDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ABCAPITAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ABCOTS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ABDL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ABFRL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ABGSEC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ABINFRA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ABLBL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ABMINTLLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ABMKNO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ABREL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ABSL10BANK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ABSLAMC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ABSLBANETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ABSLLIQUID
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ABSLMSCIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ABSLNN50ET
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ABSLPSE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ACC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ACCELYA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ACE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ACEINTEG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ACI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ACL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ACMESOLAR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ACSTECH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ACUTAAS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ADANIENSOL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ADANIENT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ADANIGREEN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ADANIPORTS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ADANIPOWER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ADFFOODS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ADL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ADOR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ADROITINFO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ADSL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ADVAIT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ADVANCE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ADVANIHOTR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ADVENTHTL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ADVENZYMES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AEGISLOG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AEGISVOPAK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AEPL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AEQUS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AEROENTER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AEROFLEX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AERONEU
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AEROPLANE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AETHER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AFCONS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AFFLE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AFIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AFSL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AGARIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AGARWALEYE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AGI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AGIIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AGL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AGROPHOS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AHCL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AHLADA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AHLEAST
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AHLUCONT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AIAENG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AIIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AIRAN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AIROLAM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AJANTPHARM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AJAXENGG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AJMERA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AJOONI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AKASH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AKCAPIT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AKG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AKI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AKSHAR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AKUMS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ALANKIT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ALBERTDAVD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ALEMBICLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ALGOQUANT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ALICON
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ALIVUS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ALKEM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ALKYLAMINE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ALLCARGO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ALLDIGI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ALLTIME
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ALMONDZ
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ALOKINDS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ALPA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ALPHA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ALPHAETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ALPHAGEO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ALPL30IETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AMAGI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AMBALALSA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AMBER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AMBICAAGAR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AMBIKCO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AMBUJACEM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AMDIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AMJLAND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AMNPLST
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AMRUTANJAN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ANANDRATHI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ANANTRAJ
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ANDHRAPAP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ANDHRSUGAR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ANGELONE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ANMOL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ANTELOPUS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ANTGRAPHIC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ANTHEM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ANUHPHR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ANUP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ANURAS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AONEGOLD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AONELIQUID
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AONENIFTY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AONESILVER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AONETMMQ50
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AONETOTAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: APARINDS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: APCL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: APCOTEXIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: APEX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: APLAPOLLO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: APLLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: APOLLO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: APOLLOHOSP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: APOLLOPIPE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: APOLLOTYRE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: APOLSINHOT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: APTUS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AQYLON
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ARCHIDPLY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ARCHIES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ARE&M
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ARENTERP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ARFIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ARIES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ARIHANT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ARIHANTCAP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ARIHANTSUP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ARIS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ARKADE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ARMANFIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AROGRANITE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ARSSBL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ARTEMISMED
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ARTNIRMAN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ARVEE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ARVIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ARVINDFASN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ARVSMART
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ASAHIINDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ASAHISONG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ASAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ASALCBR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ASHAPURMIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ASHIANA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ASHIKA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ASHIMASYN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ASHOKA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ASHOKAMET
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ASHOKLEY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ASIANENE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ASIANHOTNR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ASIANPAINT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ASIANTILES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ASKAUTOLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ASPINWALL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ASTAR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ASTEC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ASTERDM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ASTRAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ASTRAMICRO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ASTRAZEN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ATALREAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ATAM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ATGL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ATHERENERG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ATL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ATLANTAA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ATLANTAELE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ATLASCYCLE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ATUL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ATULAUTO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AUBANK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AURIONPRO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AUROPHARMA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AURUM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AURUS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AUTOAXLES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AUTOBEES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AUTOIETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AVALON
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AVANTEL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AVANTIFEED
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AVL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AVONMORE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AVROIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AVTNPL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AWFIS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AWHCL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AWL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AXISBANK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AXISCADES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AXITA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AYE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AYMSYNTEX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: AZAD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BAGFILMS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BAIDFIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BAJAJ-AUTO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BAJAJCON
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BAJAJELEC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BAJAJFINSV
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BAJAJHCARE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BAJAJHFL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BAJAJHIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BAJAJHLDNG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BAJAJINDEF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BAJAJST
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BAJEL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BAJFINANCE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BALAJEE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BALAJITELE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BALAMINES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BALKRISHNA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BALKRISIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BALMLAWRIE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BALPHARMA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BALRAMCHIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BALUFORGE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BANARBEADS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BANARISUG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BANCOINDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BANDHANBNK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BANG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BANK10ADD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BANK10BETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BANKADD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BANKBARODA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BANKBEES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BANKBETA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BANKBETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BANKETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BANKIETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BANKINDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BANKNIFTY1
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BANKPSU
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BANSALWIRE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BANSWRAS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BASF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BATAINDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BATLIBOI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BAYERCROP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BBETF0432
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BBL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BBNPNBETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BBNPPGOLD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BBOX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BBTC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BBTCL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BCG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BCLIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BCONCEPTS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BCPL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BDL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BEARDSELL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BECTORFOOD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BEDMUTHA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BEEKAY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BEL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BELLACASA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BELRISE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BEML
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BENGALASM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BEPL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BERGEPAINT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BESTAGRO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BETA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BFINVEST
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BFSI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BFUTILITIE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BHAGCHEM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BHARATCOAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BHARATFORG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BHARATRAS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BHARATSE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BHARATWIRE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BHARTIARTL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BHARTIHEXA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BHEL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BIGBLOC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BIKAJI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BIMETAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BIOCON
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BIOFILCHEM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BIRLACORPN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BIRLAMONEY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BIRLANU
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BIRLAPREC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BLACKBUCK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BLAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BLBLIMITED
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BLIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BLKASHYAP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BLS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BLSE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BLUEDART
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BLUEJET
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BLUESTARCO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BLUESTONE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BLUSPRING
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BMWVENTLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BNKETFAXIS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BOHRAIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BOMDYEING
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BONLON
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BORANA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BOROLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BORORENEW
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BOROSCI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BOSCH-HCIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BOSCHLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BPCL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BPL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BRIGADE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BRIGHOTEL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BRITANNIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BRNL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BSE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BSE500IETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BSL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BSLGOLDETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BSLNIFTY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BSLSENETFG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BSOFT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BTML
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BUILDPRO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BUTTERFLY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: BVCL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CAMLINFINE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CAMPUS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CAMS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CANBK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CANFINHOME
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CANHLIFE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CANTABIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CAPACITE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CAPILLARY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CAPITALSFB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CAPLIPOINT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CAPTRUST
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CARBORUNIV
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CARERATING
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CARRARO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CARTRADE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CARYSIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CASHIETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CASTROLIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CCAVENUE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CCCL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CCHHL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CCL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CDSL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CEATLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CEIGALL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CEINSYS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CELEBRITY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CELLO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CEMPRO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CENTENKA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CENTEXT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CENTRALBK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CENTRUM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CENTUM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CENTURYPLY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CERA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CESC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CEWATER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CGCL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CGPOWER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CHALET
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CHAMBLFERT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CHEMICAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CHEMPLASTS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CHENNPETRO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CHEVIOT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CHOICEGOLD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CHOICEIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CHOLAFIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CHOLAHLDNG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CIEINDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CIFL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CINELINE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CINEVISTA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CIPLA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CLEAN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CLEANMAX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CLSEL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CMPDI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CMRGREEN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CMSINFO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CNL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: COALINDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: COASTCORP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: COCHINSHIP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: COCKERILL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: COFORGE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: COHANCE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: COLPAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: COMFINTE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: COMMOIETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: COMPUSOFT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: COMSYN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CONCOR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CONCORDBIO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CONFIPET
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CONS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CONSUMAXIS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CONSUMBEES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CONSUMER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CONSUMIETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CONTROLPR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CORALFINAC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CORDELIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: COROMANDEL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CORONA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: COSMOFIRST
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: COUNCODOS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CPEDU
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CPL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CPPLUS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CPSEETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CRAFTSMAN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CRAMC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CREATIVEYE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CREDITACC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CREST
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CRISIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CRIZAC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CROMPTON
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CROWN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CSBBANK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CSLFINANCE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CSM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CTE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CUB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CUBEXTUB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CUMMINSIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CUPID
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CURAA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CYIENT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: CYIENTDLM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DABUR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DALBHARAT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DALMIASUG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DAMCAPITAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DANGEE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DATAMATICS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DATAPATTNS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DAVANGERE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DBCORP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DBL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DBOL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DCAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DCBBANK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DCI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DCMSHRIRAM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DCMSRIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DCW
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DCXINDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DDEVPLSTIK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DECCANCE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DECNGOLD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DEEPAKFERT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DEEPAKNTR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DEEPINDS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DEFENCE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DELHIVERY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DELTACORP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DELTAMAGNT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DEN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DENORA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DENTA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DEVIT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DEVX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DEVYANI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DGCONTENT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DHAMPURSUG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DHANBANK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DHANUKA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DHARMAJ
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DHUNINV
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DIACABS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DIAMINESQ
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DIAMONDYD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DICIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DIFFNKG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DIGIDRIVE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DIGITIDE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DIGJAMLMTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DISAQ
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DIVGIITTS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DIVIDEND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DIVISLAB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DIVOPPBEES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DIXON
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DJML
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DLF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DLINKINDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DMART
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DMCC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DNAMEDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DODLA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DOLATALGO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DOLLAR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DOLPHIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DOMS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DONEAR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DPABHUSHAN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DRAGARWQ
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DRCSYSTEMS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DREAMFOLKS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DREDGECORP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DRREDDY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DSSL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DTIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DUCON
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DVL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DWARKESH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DYCL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DYNAMATECH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: DYNPRO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: E2E
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EASEMYTRIP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EBANKNIFTY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EBBETF0430
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EBBETF0431
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EBBETF0433
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EBGNG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ECAPINSURE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ECLERX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EDELWEISS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EFCIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EGOLD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EICHERMOT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EIDPARRY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EIEL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EIHAHOTELS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EIHOTEL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EIMCOELECO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EKC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ELANTAS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ELCIDIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ELDEHSG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ELECON
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ELECTCAST
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ELECTHERM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ELGIEQUIP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ELGIRUBCO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ELIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ELIQUID
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ELITECON
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ELLEN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ELM250
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ELPROINTL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EMAMILTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EMAMIPAP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EMBDL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EMCURE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EMIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EMKAY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EMMVEE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EMSLIMITED
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EMUDHRA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EMULTIMQ
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ENDURANCE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ENERGY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ENERGYDEV
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ENEXT50
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ENGINERSIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ENIFTY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ENIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ENRIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ENTERO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EPACK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EPACKPEB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EPIGRAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EPL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EQUAL200
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EQUAL50
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EQUAL50ADD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EQUITASBNK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ERIS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ESABINDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ESAFSFB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ESCORTS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ESENSEX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ESG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ESILVER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ESSARSHPNG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ESTER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ETERNAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ETHOSLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EUREKAFORB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EUROBOND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EUROPRATIK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EVEREADY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EVIETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EVINDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EXCELINDUS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EXCELSOFT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EXICOM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EXIDEIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EXPLEOSOL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: EXXARO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FABTECH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FACT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FAZE3Q
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FCL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FDC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FEDDERSHOL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FEDERALBNK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FEDFINA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FERMENTA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FIBERWEB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FIEMIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FILATEX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FINCABLES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FINEORG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FINIETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FINKURVE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FINOPB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FINPIPE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FIRSTCRY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FISCHER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FIVESTAR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FLAIR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FLEXIADD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FLUOROCHEM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FMCGADD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FMCGIETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FMGOETZE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FOODSIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FORCEMOT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FORTIS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FOSECOIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FRACTAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FRONTSP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FSL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: FUSION
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GABRIEL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GAEL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GAIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GALAPREC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GALAXYSURF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GALLANTT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GANDHAR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GANDHITUBE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GANECOS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GANESHBE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GANESHCP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GANESHHOU
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GANGESSECU
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GARFIBRES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GARUDA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GATECH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GATECHDVR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GATEWAY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GAYAHWS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GCSL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GEEKAYWIRE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GEMAROMA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GENCON
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GENESYS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GENUSPAPER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GENUSPOWER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GEOJITFSL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GESHIP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GFLLIMITED
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GHCL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GHCLTEXTIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GICHSGFIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GICL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GICRE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GILLANDERS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GILLETTE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GILT10BETA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GILT5BETA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GILT5YBEES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GIPCL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GKENERGY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GKSL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GKWLIMITED
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GLAND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GLAXO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GLENMARK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GLOBAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GLOBALVECT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GLOBE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GLOBUSSPR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GLOSTERLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GMBREW
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GMDCLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GMMPFAUDLR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GMRAIRPORT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GMRP&UI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GNA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GNFC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GNRL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GOACARBON
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GOCLCORP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GOCOLORS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GODAVARIB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GODFRYPHLP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GODIGIT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GODREJAGRO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GODREJCP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GODREJIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GODREJPROP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GOKEX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GOKUL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GOKULAGRO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GOLD1
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GOLD360
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GOLDADD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GOLDAXIS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GOLDBEES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GOLDBETA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GOLDBND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GOLDCASE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GOLDETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GOLDIAM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GOLDIETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GOODLUCK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GOODYEAR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GOPAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GOYALALUM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GPIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GPPL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GPTHEALTH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GPTINFRA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GRANDOAK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GRANULES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GRAPHITE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GRASIM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GRAUWEIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GRAVISSHO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GRAVITA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GREAVESCOT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GREENLAM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GREENPANEL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GREENPLY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GREENPOWER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GRINDWELL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GRINFRA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GRMOVER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GROBTEA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GROWW
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GROWWCAPM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GROWWCHEM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GROWWDEFNC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GROWWEV
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GROWWGOLD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GROWWHOSPI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GROWWLIQID
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GROWWLOVOL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GROWWMC150
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GROWWMETAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GROWWMOM50
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GROWWN200
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GROWWNET
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GROWWNIFTY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GROWWNXT50
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GROWWPOWER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GROWWPSE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GROWWPSUBK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GROWWRAIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GROWWRLTY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GROWWSC250
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GROWWSLVR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GRPLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GRSE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GRWRHITECH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GSEC10ABSL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GSEC10IETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GSEC10YEAR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GSEC5IETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GSFC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GSLSU
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GSPCROP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GSS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GTL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GTLINFRA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GTPL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GUFICBIO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GUJALKALI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GUJAPOLLO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GUJENERGY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GUJRAFFIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GUJTHEM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GULFOILLUB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GULPOLY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GVPIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GVPTECH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GVT&D
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: GYFTR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HALDER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HALEOSLABS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HAPPSTMNDS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HAPPYFORGE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HARDWYN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HARIOMPIPE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HARRMALAYA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HARSHA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HATHWAY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HATSUN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HAVELLS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HAVISHA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HAWKINCOOK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HBESD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HBLENGINE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HCC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HCG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HCL-INSYS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HCLTECH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HDBFS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HDFCAMC
     exchange: NSE
     segment: CASH
     enabled: true
@@ -21,12 +4318,882 @@ instruments:
     segment: CASH
     enabled: true
 
+  - symbol: HDFCBSE500
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HDFCGOLD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HDFCGROWTH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HDFCLIFE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HDFCLIQUID
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HDFCLOWVOL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HDFCMID150
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HDFCMOMENT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HDFCNEXT50
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HDFCNIF100
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HDFCNIFBAN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HDFCNIFIT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HDFCNIFTY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HDFCPSUBK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HDFCPVTBAN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HDFCQUAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HDFCSENSEX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HDFCSILVER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HDFCSML250
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HDFCVALUE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HEADSUP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HEALTHADD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HEALTHAXIS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HEALTHCARE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HEALTHIETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HEALTHX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HEALTHY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HECPROJECT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HEG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HEIDELBERG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HEMIPROP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HERANBA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HERITGFOOD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HEROMOTOCO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HESTERBIO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HEXATRADEX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HEXT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HFCL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HGINFRA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HGM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HGS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HIKAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HIMATSEIDE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HINDALCO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HINDCOMPOS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HINDCOPPER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HINDOILEXP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HINDPETRO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HINDUNILVR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HINDWAREAP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HINDZINC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HIRECT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HISARMETAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HITECH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HLEGLAS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HLVLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HMAAGRO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HMVL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HNDFDS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HNGSNGBEES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HOMEFIRST
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HONASA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HONAUT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HONDAPOWER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HPAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HPIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HPL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HSBCGOLD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HSCL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HTMEDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HUBTOWN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HUDCO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HUHTAMAKI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: HYUNDAI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ICDSLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ICEMAKE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ICICIAMC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ICICIB22
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
   - symbol: ICICIBANK
     exchange: NSE
     segment: CASH
     enabled: true
 
-  - symbol: SBIN
+  - symbol: ICICIGI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ICICIPRULI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ICIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ICRA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IDBI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IDEA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IDFCFIRSTB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IDFNIFTYET
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IEX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IFBIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IFCI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IFGLEXPOR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IGARASHI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IGCL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IGIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IGL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IGPL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IIFL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IIFLCAPS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IITL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IKIO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IKS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IMAGICAA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IMFA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IMPAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INCREDIBLE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INDBANK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INDGN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INDHOTEL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INDIACEM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INDIAGLYCO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INDIAMART
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INDIANB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INDIANCARD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INDIANHUME
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INDIASHLTR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INDIGO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INDIGOPNTS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INDIQUBE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INDNIPPON
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INDOBORAX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INDOCO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INDOFARM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INDORAMA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INDOSTAR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INDOTHAI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INDOUS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INDPRUD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INDRAMEDCO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INDSWFTLAB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INDTERRAIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INDUSINDBK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INDUSTOWER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INFOBEAN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INFOMEDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INFRA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INFRABEES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INFRAIETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INFY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INGERRAND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INNOVACAP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INNOVANA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INNOVISION
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INOXGREEN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INOXINDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INOXWIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INSECTICID
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INTELLECT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INTENTECH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INTERARCH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INTERNET
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INTLCONV
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INVENTURE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: INVPRECQ
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IOB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IOC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IOLCP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IONEXCHANG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IPCALAB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IPL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IRB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IRCON
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IRCTC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IREDA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IRFC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IRIS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IRISDOREME
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IRMENERGY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ISFT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ISGEC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ISHANCH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ITADD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ITAXIS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ITBEES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ITBETA
     exchange: NSE
     segment: CASH
     enabled: true
@@ -36,7 +5203,6772 @@ instruments:
     segment: CASH
     enabled: true
 
+  - symbol: ITCHOTELS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ITDC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ITETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ITI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ITIETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IVALUE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IVC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IVZINGOLD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IVZINNIFTY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IWP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IXIGO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: IZMO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: J&KBANK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JAGRAN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JAGSNPHARM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JAICORPLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JAINREC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JAIPURKURT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JAMNAAUTO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JARO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JASH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JAYAGROGN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JAYBARMARU
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JAYKAY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JAYNECOIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JAYSREETEA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JBMA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JETFREIGHT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JGCHEM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JHS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JINDALPHOT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JINDALPOLY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JINDALSAW
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JINDALSTEL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JINDRILL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JINDWORLD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JIOFIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JISLDVREQS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JISLJALEQS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JITFINFRA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JKCEMENT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JKIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JKLAKSHMI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JKPAPER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JKTYRE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JLHL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JMA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JMFINANCIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JNKINDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JPOLYINVST
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JPPOWER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JSFB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JSL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JSLL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JSWCEMENT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JSWDULUX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JSWENERGY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JSWHL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JSWINFRA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JSWSTEEL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JTEKTINDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JTLIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JUBLCPL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JUBLFOOD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JUBLINGREA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JUBLPHARMA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JUNIORBEES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JUNIPER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JUSTDIAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JWL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JYOTHYLAB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JYOTICNC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: JYOTISTRUC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KABRAEXTRU
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KAJARIACER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KALAMANDIR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KALPATARU
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KALYANIFRG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KALYANKJIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KAMAHOLD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KAMATHOTEL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KAMOPAINTS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KANANIIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KANPRPLA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KANSAINER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KAPSTON
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KARMAENG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KARURVYSYA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KAVDEFENCE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KAYA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KAYNES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KCP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KCPSUGIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KDDL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KEC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KEEPLEARN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KEI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KELLTONTEC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KENNAMET
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KERNEX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KEYFINSERV
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KFINTECH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KHANDSE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KICL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KIMS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KINGFA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KIOCL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KIRANVYPAR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KIRIINDUS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KIRLFER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KIRLOSBROS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KIRLOSENG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KIRLOSIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KIRLPNU
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KISSHT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KITEX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KKCL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KLBRENG-B
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KMEW
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KMSUGAR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KNACK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KNAGRI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KNRCON
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KOHINOOR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KOKUYOCMLN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KOLTEPATIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KOTAKBANK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KOTARISUG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KOTHARIPET
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KOTHARIPRO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KOTIC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KOVAI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KPEL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KPIGREEN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KPIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KPITTECH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KPL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KPRMILL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KRBL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KREBSBIO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KRISHANA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KRISHIVAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KRISHNADEF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KRITIKA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KRONOX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KROSS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KRSNAA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KRYSTAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KSB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KSCL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KSHINTL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KSL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KSOLVES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KSR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KTKBANK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KUANTUM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KUSUMGAR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: KWIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LAGNAM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LAHOTIOV
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LALPATHLAB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LAMBODHARA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LANCORHOL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LANDMARK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LANDSMILL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LAOPALA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LASA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LASERPOWER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LATENTVIEW
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LAURUSLABS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LAXMICOT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LAXMIDENTL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LCCINFOTEC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LEMERITE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LEMONTREE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LENSKART
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LEXUS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LFIC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LGBBROSLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LGEINDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LGHL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LIBAS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LIBERTSHOE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LICHSGFIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LICI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LICMFGOLD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LICNETFGSC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LICNETFN50
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LICNETFSEN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LICNFNHGP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LICNMID100
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LIKHITHA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LINC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LINCOLN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LINDEINDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LIQGRWBEES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LIQUID
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LIQUID1
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LIQUIDADD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LIQUIDBEES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LIQUIDBETA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LIQUIDBETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LIQUIDCASE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LIQUIDETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LIQUIDIETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LIQUIDPLUS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LIQUIDSBI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LIQUIDSHRI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LLOYDSENGG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LLOYDSENT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LLOYDSME
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LMW
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LODHA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LORDSCHLO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LOTUSDEV
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LOTUSEYE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LOVABLE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LOWVOL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LOWVOL1
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LOWVOLIETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LOYALTEX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LPDC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
   - symbol: LT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LTF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LTFOODS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LTGILTBEES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LTGILTCASE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LTM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LTTS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LUMAXIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LUMAXTECH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LUPIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LUXIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: LXCHEM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: M&M
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: M&MFIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MAANALU
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MACPOWER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MADHAV
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MADHAVIPL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MADRASFERT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MAFANG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MAFATIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MAGADSUGAR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MAGNUM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MAHABANK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MAHAPEXLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MAHASTEEL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MAHEPC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MAHKTECH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MAHLIFE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MAHLOG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MAHSCOOTER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MAHSEAMLES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MAITHANALL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MAJESAUT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MAKEINDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MALLCOM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MALUPAPER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MAMATA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MANAKALUCO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MANAKCOAT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MANAKSIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MANALIPETC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MANAPPURAM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MANBA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MANCREDIT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MANGALAM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MANGLMCEM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MANINDS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MANINFRA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MANKIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MANOMAY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MANORAMA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MANUFGBEES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MANYAVAR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MAPMYINDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MARATHON
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MARICO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MARINE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MARKOLINES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MARKSANS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MARSONS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MARUTI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MASFIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MASPTOP50
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MASTEK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MASTERTR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MATRIMONY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MAXESTATES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MAXHEALTH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MAXIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MAYURUNIQ
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MAZDOCK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MBAPL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MBEL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MCCHRLS-B
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MCL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MCLOUD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MCX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MEDANTA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MEDIASSIST
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MEDICAMEQ
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MEDICO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MEDPLUS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MEESHO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MEGASTAR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MENNPIS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MERCANTILE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: METAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: METALIETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: METROBRAND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: METROGLOBL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: METROPOLIS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MFML
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MFSL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MGL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MHLXMIRU
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MHRIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MID150
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MID150BEES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MID150CASE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MIDCAP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MIDCAPADD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MIDCAPBETA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MIDCAPETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MIDCAPIETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MIDHANI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MIDQ50ADD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MIDSELIETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MIDSMALL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MIDWESTLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MINDACORP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MINDTECK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MIRZAINT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MITTAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MKPL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MMFL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MMP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MMTC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MNC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOALPHA50
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOBANK10
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOBIKWIK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOCAPITAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MODEFENCE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MODIRUBBER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MODIS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MODTHREAD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOENERGY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOGOLD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOGSEC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOHEALTH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOHITIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOINFRA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOIPO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOKSH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOLDTECH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOLDTKPAC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOLOWVOL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOM100
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOM30IETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOM50
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOMENTUM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOMENTUM30
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOMENTUM50
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOMGF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOMIDMTM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOMMIDCAP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOMNC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOMOMENTUM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MON100
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MON50EQUAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MONARCH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MONEXT50
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MONEYBOXX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MONIFTY100
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MONIFTY500
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MONQ50
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MONTECARLO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOPSE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOQUALITY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOREALTY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOREPENLAB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOSCHIP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOSERVICE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOSILVER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOSMALL250
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOTHERSON
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOTILALOFS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOTISONS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOTOUR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MOVALUE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MPHASIS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MPSLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MRF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MRPL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MSCI360
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MSCIADD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MSCIINDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MSPL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MSTCLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MSUMI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MTNL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MUFIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MUFTI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MUKANDLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MUKKA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MULTICAP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MUNJALAU
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MUNJALSHOW
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MURUDCERA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MUTHOOTCAP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MUTHOOTFIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MUTHOOTMF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MVGJL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: MWL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NACLIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NAGREEKEXP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NAHARCAP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NAHARINDUS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NAHARPOLY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NAM-INDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NARMADA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NATCAPSUQ
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NATCOPHARM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NATHBIOGEN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NATIONALUM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NATIONSTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NAUKRI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NAVA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NAVINFLUOR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NAVKARCORP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NAVNETEDUL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NAZARA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NBCC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NBIFIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NCC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NCLIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NDGL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NDL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NDLVENTURE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NDRAUTO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NDTV
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NEAGI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NELCAST
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NELCO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NEOGEN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NEPHROPLUS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NESCO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NESTLEIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NETWEB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NETWORK18
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NEULANDLAB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NEWGEN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NEXT30ADD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NEXT50
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NEXT50ADD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NEXT50BETA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NEXT50ETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NEXT50IETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NEXTMEDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NFL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NGLFINE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NHPC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NIACL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NIBE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NIBL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NIF100BEES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NIF100IETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NIFTY1
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NIFTY100EW
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NIFTYADD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NIFTYAXIS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NIFTYBEES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NIFTYBETA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NIFTYBETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NIFTYCASE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NIFTYETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NIFTYIETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NIFTYQLITY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NIITLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NIITMTS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NILAINFRA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NILASPACES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NILE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NILKAMAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NIPPOBATRY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NIRAJISPAT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NIRLON
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NITCO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NITINSPIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NITIRAJ
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NITTAGELA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NIVABUPA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NKIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NLCINDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NMDC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NOCIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NORBTEAEXP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NORTHARC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NOVARTIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NPBET
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NPST
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NRAIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NRBBEARING
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NSIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NSLNISP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NTPC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NTPCGREEN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NUCLEUS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NURECA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NUVAMA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NUVOCO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NV20
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NV20BEES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NV20IETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: NYKAA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: OAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: OBCL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: OBEROIRLTY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: OFSS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: OIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: OILIETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: OLAELEC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: OLECTRA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: OMAXE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: OMINFRAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: OMNI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: OMPOWER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ONEPOINT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ONESOURCE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ONGC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ONWARDTEC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: OPTIEMUS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ORCHASP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ORCHPHARMA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ORICONENT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ORIENTALTL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ORIENTBELL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ORIENTCEM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ORIENTCER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ORIENTELEC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ORIENTHOT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ORIENTLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ORIENTPPR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ORIENTTECH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ORISSAMINE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ORKLAINDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: OSWALGREEN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: OSWALPUMPS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: OSWALSEEDS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PACEDIGITK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PAGEIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PAISALO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PAKKA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PALASHSECU
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PANACEABIO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PANAMAPET
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PANSARI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PAR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PARACABLES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PARADEEP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PARAGMILK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PARAS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PARASPETRO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PARKHOSPS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PARKHOTELS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PASHUPATI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PATANJALI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PATELENG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PATELRMART
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PAUSHAKLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PAVNAIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PAYTM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PCBL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PCJEWELLER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PDMJEPAPER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PDSL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PENIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PERSISTENT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PETRONET
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PFC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PFIZER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PFOCUS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PFS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PGEL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PGHH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PGHL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PGIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PHARMABEES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PHOENIXLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PICCADIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PIDILITIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PIGL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PIIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PILANIINVS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PINELABS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PIONEEREMB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PIONRINV
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PIRAMALFIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PITTIENG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PIXTRANS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PKTEA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PLASTIBLEN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PLATIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PML
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PNB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PNBGILTS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PNBHOUSING
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PNC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PNCINFRA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PNGJL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PNGSREVA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: POCL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PODDARMENT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: POKARNA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: POLICYBZR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: POLYCAB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: POLYMED
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: POLYPLEX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PONNIERODE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: POONAWALLA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: POWERGRID
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: POWERICA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: POWERINDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: POWERMECH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PPLPHARMA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PRABHA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PRAENG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PRAJIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PRAKASH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PRAKASHSTL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PRAVEG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PRECAM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PRECOT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PRECWIRE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PREMCO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PREMEXPLN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PREMIERENE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PREMIERPOL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PRESTIGE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PRICOLLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PRIMESECU
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PRIMO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PRINCEPIPE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PRIVISCL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PROSTARM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PROTEAN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PROZONER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PRSMJOHNSN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PRUDENT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PSB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PSPPROJECT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PSUBANK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PSUBANKADD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PSUBNKBEES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PSUBNKIETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PTC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PTCIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PTL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PUNJABCHEM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PURVA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PVP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PVRINOX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PVSL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PVTBANIETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PVTBANK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PVTBANKADD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PVTBKGROWW
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PWL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: PYRAMID
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: QGOLDHALF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: QMSMEDI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: QNIFTY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: QUADFUTURE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: QUAL30IETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: QUALITY30
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: QUESS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: QUINT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RACE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RACLGEAR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RADAAN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RADHIKAJWE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RADIANTCMS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RADICO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RADIOCITY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RAILTEL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RAIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RAINBOW
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RAJMET
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RAJPALAYAM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RAJRATAN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RAJSREESUG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RAJTV
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RALLIS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RAMANEWS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RAMAPHO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RAMBHAJO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RAMCOCEM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RAMCOIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RAMCOSYS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RAMKY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RAMRAT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RANASUG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RANEHOLDIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RATEGAIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RATNAMANI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RATNAVEER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RAYMOND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RAYMONDLSL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RAYMONDREL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RBA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RBLBANK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RBZJEWEL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RCF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RECLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: REDINGTON
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: REDTAPE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: REFEX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: REGENCERAM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RELAXO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RELCHEMQ
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RELIABLE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RELIANCE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RELIGARE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RELTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: REMSONSIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RENUKA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: REPCOHOME
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: REPRO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RESPONIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RETAIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RGL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RHETAN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RHIM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RHL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RICOAUTO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RIIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RIR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RISHABH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RITCO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RITES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RKDL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RKEC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RKFORGE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RKSWAMY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RMC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RMDRIP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RML
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RNBDENIMS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ROHLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ROLEXRINGS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ROML
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ROSSARI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ROSSELLIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ROSSTECH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ROTO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ROUTE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RPEL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RPGLIFE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RPOWER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RPPINFRA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RPPL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RPSGVENT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RPTECH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RRIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RRKABEL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RSDFIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RSL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RSYSTEMS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RTNINDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RTNPOWER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RUBFILA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RUBICON
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RUCHINFRA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RUCHIRA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RUPA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RUSHIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RUSTOMJEE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RVHL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RVNL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: RVTH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: S&SPOWER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SAATVIKGL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SABEVENTS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SADBHAV
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SAFARI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SAGARDEEP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SAGCEM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SAGILITY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SAHLIBHFI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SAHYADRI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SAIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SAILIFE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SAIPARENT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SAKAR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SAKHTISUG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SAKSOFT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SALASAR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SALONA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SALZERELEC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SAMBHAAV
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SAMBHV
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SAMHI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SAMMAANCAP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SAMPANN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SANATHAN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SANDESH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SANDHAR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SANDUMA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SANGAMIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SANGHVIMOV
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SANOFI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SANOFICONR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SANSERA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SANSTAR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SAPPHIRE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SAPPL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SARDAEN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SAREGAMA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SARLAPOLY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SASKEN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SATIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SATIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SAURASHCEM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SAYAJIHOTL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SBC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SBCL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SBFC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SBGLP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SBIBPB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SBICARD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SBIETFCON
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SBIETFIT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SBIETFPB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SBIETFQLTY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SBIFUNDS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SBILIFE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SBILIQETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SBIMIDMOM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SBIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SBINEQWETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SBINMID150
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SBISILVER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SBISMLETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SBIVALETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SCANSTL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SCHAEFFLER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SCHAND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SCHNEIDER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SCI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SCILAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SCODATUBES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SCPL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SDBL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SEAMECLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SECMARK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SECURKLOUD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SEDEMAC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SEIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SELECTIPO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SELMC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SENCO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SENORES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SENSEXADD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SENSEXAXIS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SENSEXBETA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SENSEXETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SENSEXIETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SEPC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SERVOTECH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SESHAPAPER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SETF10GILT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SETFGOLD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SETFNIF50
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SETFNIFBK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SETFNN50
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SETL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SFL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SGFIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SGIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SGL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SGMART
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHADOWFAX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHAH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHAHALLOYS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHAILY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHAKTIPUMP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHALBY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHALPAINTS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHANKARA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHANTI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHANTIGEAR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHANTIGOLD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHARDACROP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHARDAMOTR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHAREINDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHARIABEES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHBAJRG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHILCTECH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHILPAMED
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHINDL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHIVATEX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHIVAUM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHOPERSTOP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHRADHA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHREDIGCEM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHREECEM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHREEJISPG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHREEPUSHK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHREERAMA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHREYANIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHRIKRISH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHRINGARMS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHRIPISTON
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHRIRAMFIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHRIRAMPPS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SHYAMMETL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SICAGEN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SICALLOG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SIEMENS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SIGIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SIGMA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SIGNATURE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SIGNPOST
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SIKA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SIKKO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SILGO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SILINV
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SILLYMONKS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SILVER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SILVER1
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SILVER360
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SILVERADD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SILVERAG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SILVERAXIS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SILVERBEES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SILVERBETA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SILVERBND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SILVERCASE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SILVERIETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SILVERTUC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SIMPLEXINF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SINCLAIR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SINDHUTRAD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SINGERIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SINTERCOM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SIRCA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SIS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SIYSIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SJS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SJVN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SKFINDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SKFINDUS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SKIPPER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SKMEGGPROD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SKYGOLD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SMALL250
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SMALLADD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SMALLCAP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SMALLGROWW
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SMALLIETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SMARTWORKS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SMCGLOBAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SML100CASE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SMLMAH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SMLT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SMSPHARMA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SNOWMAN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SNXT30BEES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SNXT50BETA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SOBHA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SOLARA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SOLARINDS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SOLARWORLD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SOLEX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SOMANYCERA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SOMATEX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SOMICONVEY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SONACOMS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SONAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SONAMLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SONATSOFTW
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SOTL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SOUTHBANK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SOUTHWEST
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SPAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SPANDANA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SPARC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SPCENET
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SPECIALITY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SPECTRUM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SPENCERS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SPIC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SPLIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SPLPETRO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SPMLINFRA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SPORTKING
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SRD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SREEL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SRF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SRGHFL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SRHHYPOLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SRM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SRTL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SSDL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SSWL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: STALLION
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: STANLEY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: STAR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: STARCEMENT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: STARHEALTH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: STARPAPER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: STARTECK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: STCINDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: STEELCAS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: STEELCITY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: STEELXIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: STEL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: STOVEKRAFT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: STUDDS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: STYL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: STYLAMIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: STYRENIX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SUBROS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SUDARCOLOR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SUDARSCHEM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SUDEEPPHRM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SUKHJITS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SULA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SUMEETINDS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SUMICHEM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SUMMITSEC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SUNCLAY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SUNDARAM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SUNDARMFIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SUNDRMFAST
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SUNDROP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SUNFLAG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SUNPHARMA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SUNTECK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SUNTV
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SUPERHOUSE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SUPRAJIT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SUPREME
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SUPREMEIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SUPREMEINF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SUPRIYA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SURAJEST
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SURAJLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SURAKSHA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SURANASOL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SURANAT&P
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SURYALA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SURYALAXMI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SURYAROSNI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SURYODAY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SUVEN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SUVIDHAA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SUYOG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SUZLON
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SWANCORP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SWARAJENG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SWELECTES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SWIGGY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SWSOLAR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SYMPHONY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SYNCOMF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SYNGENE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: SYRMA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TAALTECH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TAINWALCHM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TAJGVK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TAKE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TALBROAUTO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TANLA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TARACHAND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TARAPUR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TARC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TARIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TARMAT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TARSONS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TASTYBITE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TATACAP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TATACHEM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TATACOMM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TATACONSUM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TATAELXSI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TATAGOLD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TATAINVEST
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TATAPOWER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TATASTEEL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TATATECH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TATSILV
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TATVA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TBOTEK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TBZ
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TCC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TCI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TCIEXP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TCPLPACK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TCS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TDPOWERSYS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TEAMGTY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TEAMLEASE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TECH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TECHM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TECHNOE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TECHNVISN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TECILCHEM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TEGA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TEJASNET
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TEMBO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TENNIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TERASOFT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TEXINFRA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TEXMOPIPES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TEXRAIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TFCILTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TFL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TGBHOTELS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: THAKDEV
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: THANGAMAYL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: THEINVEST
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: THEJO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: THELEELA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: THEMISMED
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: THERMAX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: THOMASCOOK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: THOMASCOTT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: THYROCARE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TICL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TIIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TIINDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TIJARIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TIMETECHNO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TIMEX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TIMKEN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TINNARUBR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TIPSFILMS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TIPSMUSIC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TIRUMALCHM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TIRUPATIFL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TITAGARH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TITAN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TMB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TMCV
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TMPV
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TNIDETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TNPETRO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TNPL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TNTELE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TOLINS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TOP100CASE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TOP10ADD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TOP15IETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TOP20
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TORNTPHARM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TORNTPOWER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TOTAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TOUCHWOOD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TPHQ
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TPLPLASTEH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TRACXN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TRANSPEK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TRANSRAILL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TRAVELFOOD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TREEHOUSE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TREJHARA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TREL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TRENT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TRF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TRIDENT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TRIGYN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TRITURBINE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TRU
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TRUALT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TSFINV
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TTKHLTCARE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TTKPRESTIG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TTL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TTML
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TURTLEMINT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TVSELECT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TVSHLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TVSMOTOR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TVSSCS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TVSSRICHAK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TVTODAY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TVVISION
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: TWCGOLDETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: UBL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: UCAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: UCOBANK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: UDS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: UEL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: UFBL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: UFLEX
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: UFO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: UGARSUGAR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: UGROCAP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: UJJIVANSFB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ULTRACEMCO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ULTRAMAR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: UMESLTD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: UMIYA-MRO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: UNICHEMLAB
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: UNIECOM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: UNIENTER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: UNIMECH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: UNIONBANK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: UNIONGOLD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: UNIPARTS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: UNITDSPR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: UNITECH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: UNITEDTEA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: UNIVCABLES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: UNOMINDA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: UPL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: URBANCO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: URJA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: USHAMART
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: USK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: UTIAMC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: UTKARSHBNK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: UTLSOLAR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: UTTAMSUGAR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: UYFINCORP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: V2RETAIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VADILALIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VAIBHAVGBL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VAKRANGEE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VAL30IETF
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VALUE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VALUEAXIS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VAML
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VARDMNPOLY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VARROC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VASWANI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VBL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VCL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VEDL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VEDPOWER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VEEDOL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VENKEYS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VENTIVE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VENUSPIPES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VERANDA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VESUVIUS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VGL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VGUARD
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VHL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VIDHIING
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VIDYAWIRES
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VIJAYA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VIKASECO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VIKASLIFE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VIKRAMSOLR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VIKRAN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VIMTALABS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VINATIORGA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VINCOFE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VINDHYATEL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VINNY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VINYLINDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VIPIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VIRINCHI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VISAKAIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VISHNU
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VISHWARAJ
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VISL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VIVIDHA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VIYASH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VLSFINANCE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VMART
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VMM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VOEPL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VOGL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VOLTAMP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VOLTAS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VRAJ
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VRLLOG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VSSL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VSTIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VSTL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VSTTILLERS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: VTL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: WAAREEENER
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: WAAREEINDO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: WAAREERTL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: WABAG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: WAKEFIT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: WALCHANNAG
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: WANBURY
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: WCIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: WEALTH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: WEBELSOLAR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: WEIZMANIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: WEL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: WELCORP
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: WELENT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: WELSPLSOL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: WELSPUNLIV
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: WENDT
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: WESTLIFE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: WEWORK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: WHEELS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: WHIRLPOOL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: WILLAMAGOR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: WINDLAS
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: WINDMACHIN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: WIPL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: WIPRO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: WOCKPHARMA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: WONDERLA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: WORTHPERI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: WPIL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: WSI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: WSTCSTPAPR
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: XCHANGING
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: XELPMOC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: XPROINDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: XTGLOBAL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: YASHO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: YATHARTH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: YATRA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: YESBANK
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: YUKEN
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ZAGGLE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ZEEL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ZEEMEDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ZENITHEXPO
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ZENITHSTL
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ZENSARTECH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ZENTEC
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ZFCVINDIA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ZFSTEERING
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ZODIACLOTH
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ZOTA
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ZSARACOM
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ZUARI
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ZUARIIND
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ZYDUSLIFE
+    exchange: NSE
+    segment: CASH
+    enabled: true
+
+  - symbol: ZYDUSWELL
     exchange: NSE
     segment: CASH
     enabled: true

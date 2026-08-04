@@ -6,7 +6,11 @@ import unittest
 from core.broker.base import OrderRequest, OrderSide, OrderType, ProductType
 from core.broker.groww_fees import estimate_groww_brokerage
 from core.risk.base import RiskContext
-from core.risk.simple_intraday import SimpleIntradayRiskManager
+from core.risk.simple_intraday import (
+    DEFAULT_MIN_PROFIT_TO_BROKERAGE_RATIO_OVERRIDES,
+    IntradayRiskSettings,
+    SimpleIntradayRiskManager,
+)
 
 
 def make_order(price: float = 100.0, quantity: int = 100) -> OrderRequest:
@@ -22,7 +26,9 @@ def make_order(price: float = 100.0, quantity: int = 100) -> OrderRequest:
     )
 
 
-def make_context(target_pct: float | None) -> RiskContext:
+def make_context(
+    target_pct: float | None, strategy_name: str | None = None
+) -> RiskContext:
     return RiskContext(
         available_intraday_capital=60000.0,
         used_intraday_capital=0.0,
@@ -31,6 +37,7 @@ def make_context(target_pct: float | None) -> RiskContext:
         max_daily_loss=2500.0,
         max_trades_per_day=6,
         target_pct=target_pct,
+        strategy_name=strategy_name,
     )
 
 
@@ -65,6 +72,54 @@ class ProfitVsBrokerageGuardTests(unittest.TestCase):
         # target_pct=2% -> projected profit = 200 > min_required_profit (20)
         decision = self.risk_manager.evaluate(self.order, make_context(target_pct=2.0))
         self.assertTrue(decision.approved)
+
+
+class PerStrategyBrokerageRatioOverrideTests(unittest.TestCase):
+    """
+    OU's real numbers: notional=2000 (price=20, quantity=100), target_pct=0.4%
+    -> projected_profit = 8.0, brokerage = estimate_groww_brokerage(2000) = 5.0
+    (Groww's Rs 5 floor). At the global ratio (2.0) min_required=10 -> rejected.
+    At the ornstein_uhlenbeck override (1.3) min_required=6.5 -> approved.
+    """
+
+    def setUp(self) -> None:
+        self.risk_manager = SimpleIntradayRiskManager(
+            IntradayRiskSettings(
+                min_profit_to_brokerage_ratio_by_strategy=(
+                    DEFAULT_MIN_PROFIT_TO_BROKERAGE_RATIO_OVERRIDES
+                )
+            )
+        )
+        self.order = make_order(price=20.0, quantity=100)
+
+    def test_override_approves_ou_at_its_real_numbers(self) -> None:
+        decision = self.risk_manager.evaluate(
+            self.order,
+            make_context(target_pct=0.4, strategy_name="ornstein_uhlenbeck"),
+        )
+        self.assertTrue(decision.approved)
+
+    def test_unlisted_strategy_still_rejects_at_same_numbers(self) -> None:
+        # Same order/target_pct, but strategy_name=None -> falls through to
+        # the global 2.0 ratio, min_required=10 > profit(8) -> still rejected.
+        decision = self.risk_manager.evaluate(
+            self.order, make_context(target_pct=0.4, strategy_name=None)
+        )
+        self.assertFalse(decision.approved)
+        self.assertEqual(decision.reason, "projected_profit_below_brokerage_threshold")
+
+    def test_unknown_strategy_name_also_still_rejects(self) -> None:
+        decision = self.risk_manager.evaluate(
+            self.order,
+            make_context(target_pct=0.4, strategy_name="some_other_strategy"),
+        )
+        self.assertFalse(decision.approved)
+
+
+class RiskContextStrategyNameDefaultTests(unittest.TestCase):
+    def test_strategy_name_defaults_to_none(self) -> None:
+        context = make_context(target_pct=None)
+        self.assertIsNone(context.strategy_name)
 
 
 if __name__ == "__main__":

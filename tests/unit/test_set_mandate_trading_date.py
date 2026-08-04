@@ -37,6 +37,21 @@ class SetMandateTradingDateTests(unittest.TestCase):
         self.assertIn("a comment that must survive", text)
         self.assertIn('risk_appetite: "moderate"', text)
 
+    def test_refuses_a_saturday(self) -> None:
+        _module.main.__globals__["sys"].argv = ["prog", "2026-07-18"]  # a Saturday
+
+        with self.assertRaises(SystemExit):
+            _module.main()
+
+        # Must not have written anything - refusal happens before the file touch.
+        self.assertIn('trading_date: "2020-01-01"', self.mandate_path.read_text())
+
+    def test_refuses_a_sunday(self) -> None:
+        _module.main.__globals__["sys"].argv = ["prog", "2026-07-19"]  # a Sunday
+
+        with self.assertRaises(SystemExit):
+            _module.main()
+
     def test_missing_trading_date_line_raises(self) -> None:
         self.mandate_path.write_text("no_trading_date_here: true\n")
         _module.main.__globals__["sys"].argv = ["prog", "2026-07-16"]

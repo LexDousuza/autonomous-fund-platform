@@ -101,6 +101,79 @@ def cumulative_pnl_line_chart(
 </svg>"""
 
 
+def comparison_line_chart(
+    series_a: Iterable[tuple[object, float]],
+    label_a: str,
+    series_b: Iterable[tuple[object, float]],
+    label_b: str,
+    *,
+    width: int = 640,
+    height: int = 240,
+) -> str:
+    """
+    Two overlaid single-value trend lines on one shared axis - e.g. a
+    strategy portfolio's return vs. a benchmark's, both already rebased by
+    the caller to the same comparable unit (e.g. % return from a common
+    start) - this function has no opinion on units, it only draws
+    whatever two ``(x, value)`` series it's given. Each point's first
+    element is only used for its position in sequence (evenly spaced along
+    the x-axis), never displayed - unlike ``cumulative_pnl_line_chart``,
+    this has no per-point hover tooltip, so it doesn't need a real
+    ``datetime`` there.
+    """
+    series_a, series_b = list(series_a), list(series_b)
+    if not series_a or not series_b:
+        return '<p class="chart-empty">not enough data for a comparison chart</p>'
+
+    pad_left, pad_right, pad_top, pad_bottom = 52, 12, 16, 16
+    plot_w = width - pad_left - pad_right
+    plot_h = height - pad_top - pad_bottom
+
+    all_values = [v for _, v in series_a] + [v for _, v in series_b]
+    v_min, v_max = min(all_values), max(all_values)
+    if v_min == v_max:
+        v_min, v_max = v_min - 1, v_max + 1
+
+    def y_at(v: float) -> float:
+        return pad_top + (1 - (v - v_min) / (v_max - v_min)) * plot_h
+
+    def draw(series: list[tuple[datetime, float]], color: str) -> tuple[str, float, float]:
+        n = len(series)
+        coords = [
+            (pad_left + (i / (n - 1) if n > 1 else 0.0) * plot_w, y_at(v))
+            for i, (_, v) in enumerate(series)
+        ]
+        path_d = "M " + " L ".join(f"{x:.1f},{y:.1f}" for x, y in coords)
+        end_x, end_y = coords[-1]
+        markup = (
+            f'<path d="{path_d}" fill="none" stroke="{color}" stroke-width="2" '
+            f'stroke-linejoin="round" stroke-linecap="round"></path>'
+            f'<circle cx="{end_x:.1f}" cy="{end_y:.1f}" r="3.5" fill="{color}"></circle>'
+        )
+        return markup, end_x, end_y
+
+    path_a, end_ax, end_ay = draw(series_a, "var(--viz-series-1)")
+    path_b, end_bx, end_by = draw(series_b, "var(--viz-series-2)")
+
+    tick_values = sorted({v_min, 0.0, v_max}) if v_min <= 0.0 <= v_max else sorted({v_min, v_max})
+    ticks = "".join(
+        f'<line x1="{pad_left}" y1="{y_at(v):.1f}" x2="{width - pad_right}" y2="{y_at(v):.1f}" class="viz-grid"></line>'
+        f'<text x="{pad_left - 8}" y="{y_at(v) + 4:.1f}" text-anchor="end" class="viz-axis">{v:+,.1f}</text>'
+        for v in tick_values
+    )
+
+    return f"""<svg viewBox="0 0 {width} {height}" class="viz-chart" role="img" \
+aria-label="{html.escape(label_a)} vs {html.escape(label_b)}">
+{ticks}
+{path_b}
+{path_a}
+<text x="{end_ax + 8:.1f}" y="{end_ay + 4:.1f}" class="viz-label" style="fill:var(--viz-series-1)">{series_a[-1][1]:+.1f}</text>
+<text x="{end_bx + 8:.1f}" y="{end_by + 4:.1f}" class="viz-label" style="fill:var(--viz-series-2)">{series_b[-1][1]:+.1f}</text>
+</svg>
+<p class="viz-legend"><span class="viz-dot" style="background:var(--viz-series-1)"></span>{html.escape(label_a)}
+<span class="viz-dot" style="background:var(--viz-series-2)"></span>{html.escape(label_b)}</p>"""
+
+
 def trade_pnl_bar_chart(trades: Iterable[object], *, width: int = 640, height: int = 220) -> str:
     """
     Per-trade realized P&L as columns above/below a zero baseline.
@@ -155,6 +228,107 @@ def trade_pnl_bar_chart(trades: Iterable[object], *, width: int = 640, height: i
 </svg>
 <p class="viz-legend"><span class="viz-dot" style="background:var(--viz-good)"></span>Profit
 <span class="viz-dot" style="background:var(--viz-critical)"></span>Loss</p>"""
+
+
+def monte_carlo_fan_chart(
+    historical_closes: Iterable[float], forecast: object, *, width: int = 640, height: int = 220
+) -> str:
+    """
+    Historical closes as a solid line leading into a shaded forecast band
+    (lowest-to-highest configured percentile) with the median path
+    dashed - the one forward-looking visual idiom on this dashboard
+    (everything else here is bars/lines over past events). ``forecast``
+    needs ``.symbol`` (str), ``.percentiles`` (iterable of int) and
+    ``.percentile_paths`` (``dict[int, list[float]]``, each list
+    ``len(historical_closes)``-anchored at index 0) - a
+    ``core.pricing.monte_carlo.MonteCarloForecast``, kept structural here
+    to stay chart-library-agnostic (as ``trade_pnl_bar_chart`` does for
+    ``ClosedTrade``).
+    """
+    historical_closes = list(historical_closes)
+    if not historical_closes or not forecast.percentile_paths:
+        return '<p class="chart-empty">not enough history for a forecast</p>'
+
+    percentiles = sorted(forecast.percentiles)
+    low_p, median_p, high_p = percentiles[0], percentiles[len(percentiles) // 2], percentiles[-1]
+    low_path = forecast.percentile_paths[low_p]
+    median_path = forecast.percentile_paths[median_p]
+    high_path = forecast.percentile_paths[high_p]
+    horizon_days = len(median_path) - 1  # index 0 is the day-0 anchor, shared with the last historical close
+
+    pad_left, pad_right, pad_top, pad_bottom = 44, 12, 16, 8
+    plot_w = width - pad_left - pad_right
+    plot_h = height - pad_top - pad_bottom
+    total_steps = len(historical_closes) - 1 + horizon_days
+
+    v_min = min(historical_closes + low_path)
+    v_max = max(historical_closes + high_path)
+    if v_min == v_max:
+        v_min, v_max = v_min - 1, v_max + 1
+
+    def x_at(i: int) -> float:
+        return pad_left + (i / total_steps if total_steps else 0.0) * plot_w
+
+    def y_at(v: float) -> float:
+        return pad_top + (1 - (v - v_min) / (v_max - v_min)) * plot_h
+
+    forecast_start = len(historical_closes) - 1  # the anchor day shared between history and forecast
+    hist_coords = [(x_at(i), y_at(v)) for i, v in enumerate(historical_closes)]
+    high_coords = [(x_at(forecast_start + i), y_at(v)) for i, v in enumerate(high_path)]
+    low_coords = [(x_at(forecast_start + i), y_at(v)) for i, v in enumerate(low_path)]
+    median_coords = [(x_at(forecast_start + i), y_at(v)) for i, v in enumerate(median_path)]
+
+    hist_path_d = "M " + " L ".join(f"{x:.1f},{y:.1f}" for x, y in hist_coords)
+    median_path_d = "M " + " L ".join(f"{x:.1f},{y:.1f}" for x, y in median_coords)
+    band_d = (
+        "M " + " L ".join(f"{x:.1f},{y:.1f}" for x, y in high_coords)
+        + " L " + " L ".join(f"{x:.1f},{y:.1f}" for x, y in reversed(low_coords))
+        + " Z"
+    )
+
+    slot_w = plot_w / horizon_days if horizon_days else 0.0
+    hit_targets = "".join(
+        f'<rect x="{x_at(forecast_start + i) - slot_w / 2:.1f}" y="{pad_top}" width="{slot_w:.1f}" '
+        f'height="{plot_h}" fill="transparent" tabindex="0" '
+        f'data-tip="day {i}: P{low_p} {lo:,.2f} &middot; P{median_p} {med:,.2f} &middot; P{high_p} {hi:,.2f}"></rect>'
+        for i, (lo, med, hi) in enumerate(zip(low_path, median_path, high_path))
+    )
+
+    return f"""<svg viewBox="0 0 {width} {height}" class="viz-chart" role="img" aria-label="{horizon_days}-day Monte Carlo price forecast for {html.escape(forecast.symbol)}">
+<path d="{band_d}" fill="var(--viz-series-1)" opacity="0.15"></path>
+<path d="{hist_path_d}" fill="none" stroke="var(--viz-text-secondary)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></path>
+<path d="{median_path_d}" fill="none" stroke="var(--viz-series-1)" stroke-width="2" stroke-dasharray="5,4" stroke-linejoin="round" stroke-linecap="round"></path>
+{hit_targets}
+</svg>"""
+
+
+def sparkline(values: Iterable[float], *, width: int = 120, height: int = 32, color: str = "var(--viz-series-1)") -> str:
+    """
+    Minimal trend line for a stat tile's hero figure - the figure
+    contract's decoration for the number beside it, not a chart in its
+    own right: no axes, no grid, no tooltip.
+    """
+    values = list(values)
+    if len(values) < 2:
+        return ""
+    v_min, v_max = min(values), max(values)
+    if v_min == v_max:
+        v_min, v_max = v_min - 1, v_max + 1
+
+    def x_at(i: int) -> float:
+        return (i / (len(values) - 1)) * width
+
+    def y_at(v: float) -> float:
+        return height - ((v - v_min) / (v_max - v_min)) * height
+
+    coords = [(x_at(i), y_at(v)) for i, v in enumerate(values)]
+    path_d = "M " + " L ".join(f"{x:.1f},{y:.1f}" for x, y in coords)
+    return (
+        f'<svg viewBox="0 0 {width} {height}" width="{width}" height="{height}" '
+        f'class="viz-sparkline" role="img" aria-hidden="true">'
+        f'<path d="{path_d}" fill="none" stroke="{color}" stroke-width="2" '
+        f'stroke-linejoin="round" stroke-linecap="round"></path></svg>'
+    )
 
 
 def magnitude_bar_chart(items: Iterable[tuple[str, int]], *, width: int = 640) -> str:

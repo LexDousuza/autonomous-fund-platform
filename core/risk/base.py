@@ -39,6 +39,7 @@ class RiskContext:
     target_pct: float | None = None
     available_margin: float | None = None
     used_margin: float = 0.0
+    strategy_name: str | None = None
 
 
 class RiskManager(ABC):

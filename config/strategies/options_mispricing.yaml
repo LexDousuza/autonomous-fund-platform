@@ -1,0 +1,31 @@
+strategy:
+  name: options_mispricing
+
+# NOTE: `option_chain_provider` is not set here - it isn't a
+# YAML-serializable primitive (see
+# core/strategy/options_mispricing.py's docstring). Whatever builds
+# this strategy's StrategyContext must inject an object with
+# get_chain(underlying_symbol, exchange, expiry_horizon_days, spot)
+# into params["option_chain_provider"] itself; if omitted, the
+# strategy quietly abstains (no signal) rather than failing.
+#
+# allow_naked_writing here is this strategy's OWN opt-in - it stacks
+# with (never substitutes for) the global OPTIONS_WRITING_CONFIRM
+# safety gate in apps/live_trader/config.py. Both must be satisfied
+# for a naked write to actually reach the broker.
+#
+# Hardening pass (2026-07-25): dividend_yield/min_open_interest/
+# max_iv_divergence_ratio are new - see this strategy's docstring's
+# "Statistical grounding" and spread-awareness sections for what each
+# actually does. All default to their pre-hardening no-op values, so
+# this file's existing behavior is unchanged unless you edit these.
+params:
+  expiry_horizon_days: 30
+  strike_band_pct: 5.0
+  mispricing_threshold_pct: 15.0
+  historical_vol_lookback_bars: 20
+  risk_free_rate: 0.07
+  allow_naked_writing: false
+  dividend_yield: 0.0
+  min_open_interest: 0.0
+  max_iv_divergence_ratio: 2.0

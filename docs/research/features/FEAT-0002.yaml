@@ -1,0 +1,40 @@
+id: FEAT-0002
+feature: gap_pct
+hypothesis: Overnight gap (today's open vs. prior close) predicts forward 5-day return.
+economic_mechanism: >
+  Overnight order flow (news, global-market correlation, index-fund
+  rebalancing) the prior close didn't reflect.
+question_2_redundancy_check: >
+  Distinct from momentum_return - entirely overnight, never sees any
+  intraday price action.
+
+methodology: cross-sectional daily IC, 122-symbol universe (real NSE corporate-actions table applied - see FEAT-0001)
+dataset: data/processed/nse_daily_12mo.csv
+period: 2025-07 to 2026-07 (~12 months)
+parameters: {forward_horizon_days: 5}
+
+bootstrap_ci:
+  point_estimate: 0.00888425718046072
+  lower: -0.0037944741811534325
+  upper: 0.021818063574243853
+  n_resamples: 2000
+p_value: 0.252
+fdr_corrected: false
+n_observations: 240
+
+git_commit: b32f494a980aa65e74b7e5753caa8dae3237e725
+data_snapshot_id: null
+python_version: "3.14.2"
+random_seed: 0
+
+date_opened: 2026-07-29
+date_decided: 2026-07-30
+decision: fail
+reason: >
+  Same conclusion across all 3 data states (25 unadjusted -> 126 with a
+  crude exclusion heuristic -> 122 with the real corporate-actions
+  table): small positive IC (0.004 -> 0.010 -> 0.009), never close to
+  significant (p=0.763 -> 0.190 -> 0.252). Direction stayed consistent
+  throughout, just underpowered - unlike momentum_return, this one never
+  looked like a false positive at any stage, it just never cleared the
+  bar either.

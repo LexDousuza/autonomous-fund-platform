@@ -1,0 +1,24 @@
+strategy:
+  name: gbm_momentum
+
+# Statistically fit momentum (see core/pricing/gbm_drift.py and this
+# strategy's own docstring) instead of momentum.yaml's fixed
+# "% price change + volume multiplier" heuristic - fits GBM drift/vol on
+# a rolling window each bar, trading only when the drift is
+# statistically significant. Third of the "test one equation at a time"
+# research strategies, after the two Ornstein-Uhlenbeck mean-reversion
+# variants - see docs/strategy-specs/gbm_momentum.md.
+params:
+  lookback_bars: 60
+  min_t_stat: 2.5
+  session_window_minutes: 90
+  allow_multiple_entries: false
+
+# Same liquidity+uptrend screen momentum.yaml uses - a statistically
+# significant drift is still only worth trading on a name that's
+# actually liquid enough to fill.
+candidate_profile:
+  require_liquidity_and_uptrend: true
+  min_avg_volume: 50000
+  trend_lookback_bars: 10
+  rank_by_volatility: true

@@ -16,13 +16,17 @@ Run with:
 from __future__ import annotations
 
 import io
+import json
 import os
+import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import contextmanager, redirect_stdout
+from pathlib import Path
 from unittest.mock import patch
 
 from growwapi import GrowwAPI
 from growwapi.groww.exceptions import GrowwAPIAuthenticationException, GrowwAPIBadRequestException
+from kiteconnect import KiteConnect
 
 from apps.live_trader.config import (
     LIVE_CONFIRM_REQUIRED_VALUE,
@@ -42,15 +46,22 @@ from apps.live_trader.main import (
 from core.audit.models import AuditEvent, SessionMetadata, SessionSummary
 from core.audit.sink import AuditSink, NullAuditSink
 from core.broker.base import OrderRequest, OrderSide, OrderType, ProductType
+from core.broker.estimated_margin import EstimatedSpanMarginCalculator
 from core.broker.factory_models import BrokerConfig
 from core.broker.groww_adapter import GrowwBrokerAdapter
 from core.broker.groww_errors import GrowwAuthenticationError
 from core.broker.groww_models import GrowwCredentials
 from core.broker.paper import PaperBroker
 from core.execution.orchestrator import ExecutionOrchestrator
+from core.market_data.candidate_profile import CandidateProfile
+from core.market_data.candidate_selection_store import CandidateSelection
 from core.market_data.errors import MarketDataProviderError
 from core.market_data.groww_live_feed import GrowwLiveMarketDataFeed
+from core.market_data.kite_option_chain import KiteOptionChainProvider
 from core.market_data.memory_feed import MemoryMarketDataFeed
+from core.market_data.universe_models import Instrument
+from core.news.google_news_feed import NewsItem
+from core.risk.options_margin import OptionsMarginRiskManager
 from core.notifications.alert_sink import NullAlertSink
 
 VALID_ENV = {
@@ -71,6 +82,10 @@ GROWW_LIVE_BROKER_ENV = {
     "LIVE_BROKER_PROVIDER": "groww",
     "LIVE_MARKET_DATA_PROVIDER": "groww",
     "LIVE_CONFIRM": LIVE_CONFIRM_REQUIRED_VALUE,
+    # SEBI's algo-tag gate (see apps/live_trader/config.py's
+    # MissingBrokerAlgoIdError) - any non-blank value satisfies it here,
+    # its exact content is never asserted on by these tests.
+    "LIVE_BROKER_ALGO_ID": "TEST-ALGO-ID",
 }
 
 # Canned single-candle response for the candidate price-history fetch
@@ -81,6 +96,33 @@ GROWW_LIVE_BROKER_ENV = {
 SAMPLE_HISTORICAL_CANDLES_RESPONSE = {
     "candles": [[1767250800, 2495.0, 2505.0, 2490.0, 2500.0, 1000.0]]
 }
+
+# build_live_session also runs a best-effort fo_eligible IV screen before
+# bucket selection now (see core/market_data/fo_iv_screen.py) - patched
+# module-wide (not per-test) so every existing groww-provider test here
+# keeps its "no real network I/O" guarantee without touching each test's
+# own mock decorators/signatures. An empty expiries list makes the
+# screen a no-op past this one call.
+_no_expiries_patcher = patch.object(GrowwAPI, "get_expiries", return_value={"expiries": []})
+
+# build_live_session also checks for an overnight-precomputed candidate
+# selection now (see core/market_data/candidate_selection_store.py) -
+# patched module-wide, same reasoning as _no_expiries_patcher above: a
+# real data/candidate_selection/<date>.json on this machine (e.g. from
+# an actual overnight run) must never silently change what these tests
+# exercise. BuildLiveSessionPersistedSelectionTests overrides this
+# per-test (a closer decorator wins) to actually test the fast path.
+_no_persisted_selection_patcher = patch("apps.live_trader.main.load_candidate_selection", return_value=None)
+
+
+def setUpModule() -> None:
+    _no_expiries_patcher.start()
+    _no_persisted_selection_patcher.start()
+
+
+def tearDownModule() -> None:
+    _no_expiries_patcher.stop()
+    _no_persisted_selection_patcher.stop()
 
 
 class RecordingAuditSink(AuditSink):
@@ -320,6 +362,150 @@ class BuildLiveSessionTests(unittest.TestCase):
         self.assertEqual(ctx.session_config.execution_mode, "live")
         self.assertEqual(ctx.broker_config.provider, "groww")
         self.assertEqual(ctx.broker_config.mode, "live")
+
+
+# Env for a real Kite live broker path, market data routed through Kite
+# too (an allowed combination - see _ALLOWED_PROVIDER_COMBINATIONS).
+# build_market_data_feed is always patched alongside this so no real
+# Kite market-data call is attempted.
+KITE_LIVE_BROKER_ENV = {
+    "KITE_API_KEY": "test-kite-key",
+    "KITE_ACCESS_TOKEN": "test-kite-token",
+    "LIVE_BROKER_PROVIDER": "kite",
+    "LIVE_MARKET_DATA_PROVIDER": "kite",
+    "LIVE_CONFIRM": LIVE_CONFIRM_REQUIRED_VALUE,
+    "LIVE_BROKER_ALGO_ID": "TEST-ALGO-ID",
+}
+
+
+class _FakeKiteTransportForMargin:
+    """Stands in for a real KiteHttpTransport: only get_margins() is
+    exercised by the wiring under test."""
+
+    def __init__(self, net_margin: float) -> None:
+        self.net_margin = net_margin
+        self.segments_requested: list[str | None] = []
+
+    def get_margins(self, segment: str | None = None) -> dict:
+        self.segments_requested.append(segment)
+        return {"net": self.net_margin}
+
+
+class _FakeKiteBrokerForMargin(PaperBroker):
+    """A broker with a `.transport` attribute (what build_live_session's
+    margin wiring reads) but PaperBroker's real, network-free behavior
+    for everything else (list_positions, place_order)."""
+
+    def __init__(self, transport: object) -> None:
+        super().__init__()
+        self.transport = transport
+
+
+class AvailableMarginWiringTests(unittest.TestCase):
+    """
+    core.broker.kite_margin.fetch_available_margin threaded into
+    TradingSessionConfig.available_margin for real Kite sessions only -
+    see core/execution/orchestrator.py's OptionsMarginRiskManager
+    consumer and this repo's practicality-audit history of naked writes
+    being unconditionally rejected while this value was always None.
+    """
+
+    @patch.dict(os.environ, KITE_LIVE_BROKER_ENV)
+    @patch.object(KiteConnect, "profile", return_value={"user_id": "TEST"})
+    @patch("apps.live_trader.main.build_market_data_feed", return_value=MemoryMarketDataFeed(bars=[]))
+    @patch(
+        "apps.live_trader.candidate_selection.build_market_data_feed",
+        return_value=MemoryMarketDataFeed(bars=[]),
+    )
+    def test_kite_session_threads_fetched_margin_into_session_config(
+        self, mock_build_candidate_feed, mock_build_feed, mock_profile
+    ) -> None:
+        # KiteMarketDataTransport (built for the option-chain-provider
+        # injection, a separate concern from the fake broker/transport
+        # below) really does authenticate against kiteconnect.KiteConnect
+        # at construction - mocked at the SDK level so this stays
+        # network-free, same reasoning as GrowwAPI.get_access_token above.
+        fake_transport = _FakeKiteTransportForMargin(net_margin=87654.0)
+        with patch(
+            "apps.live_trader.main.build_broker",
+            return_value=_FakeKiteBrokerForMargin(fake_transport),
+        ):
+            ctx = build_live_session()
+
+        self.assertEqual(ctx.session_config.available_margin, 87654.0)
+        self.assertEqual(fake_transport.segments_requested, ["equity"])
+        self.assertIsInstance(
+            ctx.session_config.strategy_params["option_chain_provider"], KiteOptionChainProvider
+        )
+
+    @patch.dict(os.environ, GROWW_LIVE_BROKER_ENV)
+    @patch.object(GrowwAPI, "get_access_token", return_value="fake-token")
+    @patch.object(GrowwAPI, "get_historical_candles", return_value=SAMPLE_HISTORICAL_CANDLES_RESPONSE)
+    def test_groww_session_leaves_available_margin_unset(
+        self, mock_get_historical_candles, mock_get_token
+    ) -> None:
+        # Groww's account-level margin fetch is a separate, out-of-scope
+        # gap (GrowwMarketDataTransport.get_available_margin_details()
+        # exists but isn't wired) - confirms this Kite-only change didn't
+        # accidentally start populating it for Groww too.
+        with patch("apps.live_trader.main.build_broker", return_value=PaperBroker()):
+            ctx = build_live_session()
+
+        self.assertIsNone(ctx.session_config.available_margin)
+
+    @patch.dict(os.environ, {}, clear=False)
+    def test_paper_provider_gets_margin_aware_risk_manager_and_simulated_margin(self) -> None:
+        # Default provider (paper broker + memory market data) - needs no
+        # credentials at all, matching BuildLiveSessionTests's identical
+        # default-config precedent.
+        for var in ("GROWW_API_KEY", "GROWW_API_SECRET", "LIVE_BROKER_PROVIDER", "LIVE_MARKET_DATA_PROVIDER"):
+            os.environ.pop(var, None)
+
+        ctx = build_live_session()
+
+        risk_manager = ctx.orchestrator.risk_manager
+        self.assertIsInstance(risk_manager, OptionsMarginRiskManager)
+        self.assertIsInstance(risk_manager.margin_calculator, EstimatedSpanMarginCalculator)
+        self.assertEqual(ctx.session_config.available_margin, ctx.allocation_plan.intraday_capital)
+
+
+class FixedUniverseSegmentBypassTests(unittest.TestCase):
+    """
+    CandidateProfile.fixed_universe_segment must skip the entire cash-
+    equity prescreen/historical-fetch/bucket-selection pipeline and load
+    the fixed index universe instead - see that field's docstring.
+    """
+
+    @patch.dict(os.environ, {}, clear=False)
+    @patch(
+        "apps.live_trader.main.load_strategy_config",
+        return_value=("index_options_test_strategy", {}, CandidateProfile(fixed_universe_segment="INDEX")),
+    )
+    def test_selects_index_instruments_and_skips_prescreen(self, mock_load_strategy_config) -> None:
+        for var in ("GROWW_API_KEY", "GROWW_API_SECRET", "LIVE_BROKER_PROVIDER", "LIVE_MARKET_DATA_PROVIDER"):
+            os.environ.pop(var, None)
+
+        ctx = build_live_session()
+
+        self.assertEqual(set(ctx.session_symbols), {"NIFTY", "BANKNIFTY"})
+        self.assertIsNone(ctx.prescreen_result)
+        self.assertFalse(ctx.used_precomputed_selection)
+
+    @patch.dict(os.environ, {}, clear=False)
+    @patch(
+        "apps.live_trader.main.load_strategy_config",
+        return_value=("index_options_test_strategy", {}, CandidateProfile(fixed_universe_segment="INDEX")),
+    )
+    @patch("apps.live_trader.main.load_candidate_selection")
+    def test_never_consults_persisted_or_live_candidate_selection(
+        self, mock_load_candidate_selection, mock_load_strategy_config
+    ) -> None:
+        for var in ("GROWW_API_KEY", "GROWW_API_SECRET", "LIVE_BROKER_PROVIDER", "LIVE_MARKET_DATA_PROVIDER"):
+            os.environ.pop(var, None)
+
+        build_live_session()
+
+        mock_load_candidate_selection.assert_not_called()
 
 
 def _broker_with_open_position(symbol: str = "RELIANCE") -> PaperBroker:
@@ -669,6 +855,251 @@ class StartupBannerTests(unittest.TestCase):
             print_startup_banner(ctx)
 
         self.assertIn("Dry run: True", buffer.getvalue())
+
+
+_ANGELONE_ENV = {
+    "ANGELONE_API_KEY": "test-api-key",
+    "ANGELONE_CLIENT_CODE": "C123",
+    "ANGELONE_PASSWORD": "1234",
+    "ANGELONE_TOTP_SECRET": "JBSWY3DPEHPK3PXP",
+    "LIVE_BROKER_PROVIDER": "paper",
+    "LIVE_MARKET_DATA_PROVIDER": "angelone",
+}
+
+_ANGELONE_SCRIP_MASTER_FIXTURE = [
+    {"token": "2885", "symbol": "RELIANCE-EQ", "name": "RELIANCE", "instrumenttype": "", "exch_seg": "NSE"},
+    {"token": "1594", "symbol": "INFY-EQ", "name": "INFY", "instrumenttype": "", "exch_seg": "NSE"},
+]
+
+
+class FakeAngelOneClientForLiveSession:
+    """
+    Test double covering every SmartConnect call build_live_session's
+    Angel One path can make: auth, the prescreen's bulk LTP, and the
+    candidate historical fetch. Deliberately excludes ltpData - the live
+    feed authenticates at construction but build_live_session never
+    calls .stream(), so a single-symbol LTP poll never happens here.
+    """
+
+    def generateSession(self, client_code, password, totp):
+        return {"status": True, "data": {"jwtToken": "jwt", "refreshToken": "refresh", "feedToken": "feed"}}
+
+    def getMarketData(self, mode, exchangeTokens):
+        # RELIANCE priced affordable, INFY priced above the test mandate's
+        # max_capital_per_trade - exercises both prescreen outcomes in one call.
+        return {
+            "status": True,
+            "message": "SUCCESS",
+            "errorcode": "",
+            "data": {
+                "fetched": [
+                    {"exchange": "NSE", "tradingSymbol": "RELIANCE-EQ", "symbolToken": "2885", "ltp": 100.0},
+                    {"exchange": "NSE", "tradingSymbol": "INFY-EQ", "symbolToken": "1594", "ltp": 999999.0},
+                ],
+                "unfetched": [],
+            },
+        }
+
+    def getCandleData(self, params):
+        return {
+            "status": True,
+            "message": "SUCCESS",
+            "errorcode": "",
+            "data": [["2026-01-01T09:15:00+05:30", 100.0, 101.0, 99.0, 100.5, 1000]],
+        }
+
+
+@contextmanager
+def _patched_angelone_scrip_master():
+    body = json.dumps(_ANGELONE_SCRIP_MASTER_FIXTURE).encode("utf-8")
+
+    class _FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return body
+
+    with patch("urllib.request.urlopen", return_value=_FakeResponse()):
+        yield
+
+
+def _make_two_symbol_universe_path(test_case: unittest.TestCase) -> str:
+    """Shared by every test that needs a tiny real universe file instead of the ~2400-symbol production one."""
+    tmp_dir = tempfile.TemporaryDirectory()
+    test_case.addCleanup(tmp_dir.cleanup)
+    path = Path(tmp_dir.name) / "universe.yaml"
+    path.write_text(
+        "universe_name: two_symbol_test\n"
+        "instruments:\n"
+        "  - symbol: RELIANCE\n"
+        "    exchange: NSE\n"
+        "    segment: CASH\n"
+        "    enabled: true\n"
+        "  - symbol: INFY\n"
+        "    exchange: NSE\n"
+        "    segment: CASH\n"
+        "    enabled: true\n",
+        encoding="utf-8",
+    )
+    return str(path)
+
+
+class BuildLiveSessionAngelOnePrescreenTests(unittest.TestCase):
+    """
+    apps.live_trader.main's Angel One-only candidate-prescreen wiring
+    (see core/market_data/candidate_prescreen.py) - a real end-to-end
+    build_live_session() call against a tiny 2-symbol test universe, not
+    the full ~2400-symbol production one (impractical to fake at that
+    scale), with a bullish canned news item for RELIANCE so it's
+    deterministic which symbol survives the news cut too.
+    """
+
+    def _universe_path(self) -> str:
+        return _make_two_symbol_universe_path(self)
+
+    @patch.dict(os.environ, _ANGELONE_ENV, clear=False)
+    @patch("core.market_data.candidate_prescreen.GoogleNewsFeed")
+    @patch("core.market_data.angelone_transport.SmartConnect", return_value=FakeAngelOneClientForLiveSession())
+    def test_prescreen_narrows_candidates_before_bucket_selection(
+        self, mock_smart_connect, mock_news_feed_cls
+    ) -> None:
+        mock_news_feed_cls.return_value.fetch.return_value = [
+            NewsItem(
+                query="RELIANCE",
+                headline="Stock surges on record profit growth",
+                link="",
+                source=None,
+                published_at=None,
+            )
+        ]
+
+        with _patched_angelone_scrip_master():
+            ctx = build_live_session(universe_path=self._universe_path())
+
+        self.assertEqual(ctx.market_data_config.provider, "angelone")
+        self.assertIsNotNone(ctx.prescreen_result)
+        # INFY excluded as unaffordable before any news call was even made for it;
+        # RELIANCE survives (affordable + bullish news) into bucket selection.
+        self.assertEqual([i.symbol for i in ctx.prescreen_result.excluded_unaffordable], ["INFY"])
+        self.assertEqual([i.symbol for i in ctx.candidate_instruments], ["RELIANCE"])
+        mock_news_feed_cls.return_value.fetch.assert_called_once()
+
+    @patch.dict(os.environ, _ANGELONE_ENV, clear=False)
+    @patch("core.market_data.candidate_prescreen.GoogleNewsFeed")
+    @patch("core.market_data.angelone_transport.SmartConnect", return_value=FakeAngelOneClientForLiveSession())
+    def test_banner_shows_prescreen_section_for_angelone(self, mock_smart_connect, mock_news_feed_cls) -> None:
+        mock_news_feed_cls.return_value.fetch.return_value = []
+
+        with _patched_angelone_scrip_master():
+            ctx = build_live_session(universe_path=self._universe_path())
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            print_startup_banner(ctx)
+        output = buffer.getvalue()
+
+        self.assertIn("=== CANDIDATE PRESCREEN ===", output)
+        self.assertIn("excluded unaffordable: 1", output)
+
+    @patch.dict(os.environ, {**_ANGELONE_ENV, "LIVE_ANGELONE_LIVE_MODE": "candles"}, clear=False)
+    @patch("core.market_data.candidate_prescreen.GoogleNewsFeed")
+    @patch("core.market_data.angelone_transport.SmartConnect", return_value=FakeAngelOneClientForLiveSession())
+    def test_angelone_live_mode_candles_builds_live_candles_market_data_config(
+        self, mock_smart_connect, mock_news_feed_cls
+    ) -> None:
+        mock_news_feed_cls.return_value.fetch.return_value = []
+
+        with _patched_angelone_scrip_master():
+            ctx = build_live_session(universe_path=self._universe_path())
+
+        self.assertEqual(ctx.market_data_config.provider, "angelone")
+        self.assertEqual(ctx.market_data_config.mode, "live_candles")
+
+
+class FakeAngelOneClientRejectingSelectionCalls:
+    """
+    Only implements generateSession (needed to construct the live feed,
+    which authenticates regardless of where session_instruments came
+    from) - getMarketData/getCandleData raise if called at all, proving
+    a persisted selection genuinely skips prescreen and the historical
+    fetch rather than merely ignoring their result.
+    """
+
+    def generateSession(self, client_code, password, totp):
+        return {"status": True, "data": {"jwtToken": "jwt", "refreshToken": "refresh", "feedToken": "feed"}}
+
+    def getMarketData(self, mode, exchangeTokens):
+        raise AssertionError("getMarketData (prescreen) must not be called when a selection was already persisted")
+
+    def getCandleData(self, params):
+        raise AssertionError("getCandleData (historical fetch) must not be called when a selection was already persisted")
+
+
+class BuildLiveSessionPersistedSelectionTests(unittest.TestCase):
+    """
+    apps.live_trader.main's fast path for an overnight-precomputed
+    selection (see apps/live_trader/select_candidates_main.py and
+    core/market_data/candidate_selection_store.py) - the market-open
+    session should use it directly and skip prescreen/historical/bucket
+    selection entirely, not just prefer it.
+    """
+
+    @patch.dict(os.environ, _ANGELONE_ENV, clear=False)
+    @patch(
+        "apps.live_trader.main.load_candidate_selection",
+        return_value=CandidateSelection(
+            trading_date="2026-01-01",
+            computed_at="2026-01-01T00:00:00+00:00",
+            instruments=[Instrument(symbol="RELIANCE", exchange="NSE")],
+        ),
+    )
+    @patch("core.market_data.angelone_transport.SmartConnect", return_value=FakeAngelOneClientRejectingSelectionCalls())
+    def test_persisted_selection_is_used_and_skips_prescreen_and_historical_fetch(
+        self, mock_smart_connect, mock_load_selection
+    ) -> None:
+        ctx = build_live_session()
+
+        self.assertTrue(ctx.used_precomputed_selection)
+        self.assertIsNone(ctx.prescreen_result)
+        self.assertEqual([i.symbol for i in ctx.session_instruments], ["RELIANCE"])
+        self.assertEqual(ctx.session_symbols, ["RELIANCE"])
+        mock_load_selection.assert_called_once()
+
+    @patch.dict(os.environ, _ANGELONE_ENV, clear=False)
+    @patch(
+        "apps.live_trader.main.load_candidate_selection",
+        return_value=CandidateSelection(trading_date="2026-01-01", computed_at="2026-01-01T00:00:00+00:00", instruments=[]),
+    )
+    @patch("core.market_data.angelone_transport.SmartConnect", return_value=FakeAngelOneClientRejectingSelectionCalls())
+    def test_persisted_empty_selection_produces_empty_session_not_a_crash(
+        self, mock_smart_connect, mock_load_selection
+    ) -> None:
+        ctx = build_live_session()
+
+        self.assertTrue(ctx.used_precomputed_selection)
+        self.assertEqual(ctx.session_instruments, [])
+        self.assertEqual(ctx.session_symbols, [])
+
+    @patch.dict(os.environ, _ANGELONE_ENV, clear=False)
+    @patch("apps.live_trader.main.load_candidate_selection", return_value=None)
+    @patch("core.market_data.candidate_prescreen.GoogleNewsFeed")
+    @patch("core.market_data.angelone_transport.SmartConnect", return_value=FakeAngelOneClientForLiveSession())
+    def test_no_persisted_selection_falls_back_to_live_selection(
+        self, mock_smart_connect, mock_news_feed_cls, mock_load_selection
+    ) -> None:
+        mock_news_feed_cls.return_value.fetch.return_value = [
+            NewsItem(query="RELIANCE", headline="Stock surges on record profit growth", link="", source=None, published_at=None)
+        ]
+
+        with _patched_angelone_scrip_master():
+            ctx = build_live_session(universe_path=_make_two_symbol_universe_path(self))
+
+        self.assertFalse(ctx.used_precomputed_selection)
+        self.assertIsNotNone(ctx.prescreen_result)
 
 
 if __name__ == "__main__":

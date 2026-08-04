@@ -19,6 +19,8 @@ from unittest.mock import patch
 from growwapi import GrowwAPI
 
 from core.market_data.angelone_historical_feed import AngelOneHistoricalMarketDataFeed
+from core.market_data.angelone_intraday_feed import AngelOneIntradayLiveMarketDataFeed
+from core.market_data.angelone_live_feed import AngelOneLiveMarketDataFeed
 from core.market_data.angelone_transport import AngelOneMarketDataTransport
 from core.market_data.csv_feed import CSVMarketDataFeed
 from core.market_data.factory import build_market_data_feed
@@ -240,13 +242,19 @@ class BuildAngelOneMarketDataFeedTests(unittest.TestCase):
     Angel One's real auth endpoint.
     """
 
-    def test_angelone_live_mode_raises(self, mock_smart_connect) -> None:
-        # Angel One is historical-data only in this platform - see
-        # core/market_data/angelone_transport.py's module docstring.
-        with self.assertRaises(ValueError):
-            build_market_data_feed(
-                MarketDataConfig(provider="angelone", mode="live", metadata=_ANGELONE_METADATA)
-            )
+    def test_angelone_live_config_returns_angelone_live_feed(self, mock_smart_connect) -> None:
+        feed = build_market_data_feed(
+            MarketDataConfig(provider="angelone", mode="live", metadata=_ANGELONE_METADATA)
+        )
+
+        self.assertIsInstance(feed, AngelOneLiveMarketDataFeed)
+
+    def test_angelone_live_candles_config_returns_angelone_intraday_feed(self, mock_smart_connect) -> None:
+        feed = build_market_data_feed(
+            MarketDataConfig(provider="angelone", mode="live_candles", metadata=_ANGELONE_METADATA)
+        )
+
+        self.assertIsInstance(feed, AngelOneIntradayLiveMarketDataFeed)
 
     def test_angelone_paper_mode_raises(self, mock_smart_connect) -> None:
         with self.assertRaises(ValueError):

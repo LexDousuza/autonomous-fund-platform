@@ -1,0 +1,33 @@
+id: EXP-0007
+hypothesis: Fixed "% price change + volume multiplier" momentum predicts continuation.
+economic_mechanism: >
+  A stock moving hard on real, above-average volume early in the session is
+  hypothesized to be getting bid up on genuine order flow rather than noise
+  - the bet is that momentum/continuation traders extend the move further
+  before it exhausts, and that catching it early in the session (not hours
+  in) leaves the most room left to run. See
+  docs/strategy-specs/momentum.md.
+
+dataset: data/processed/nse_5min_dev.csv
+period: {train_or_dev: "nse_5min_dev.csv, 123 trading days", holdout: null}
+parameters: {lookback_bars: 10, min_price_change_pct: 1.0, min_volume_multiplier: 1.5, session_window_minutes: 90}
+
+bootstrap_ci: {point_estimate: 0.6365632720285479, lower: 0.12261492633443363, upper: 2.429698506621584, n_resamples: 1998}
+p_value: 0.578
+fdr_corrected: false   # Benjamini-Hochberg across all 10 experiments with a computed p-value, fdr=0.05
+kill_criteria_result: {ci_lower_bound_above_1: false, fdr_p_under_threshold: false, holdout_drop_under_25pct: null, walk_forward_sign_consistent: null}
+
+git_commit: b32f494a980aa65e74b7e5753caa8dae3237e725
+config_version: config/strategies/momentum.yaml
+data_snapshot_id: sha256:a172d0e259f144091bda8b63db988e755a97fb2245c7a9cb9a73dce1825f8177
+python_version: "3.14.2"
+random_seed: 0
+
+date_opened: 2026-07-28
+date_decided: 2026-07-28
+decision: fail
+reason: >
+  Only 8 trades on this dataset - CI is wide [0.12, 2.43] and p=0.578, not
+  significant in either direction. This is "not enough evidence," distinct
+  from EXP-0008 through EXP-0012 below, which have enough trades to show a
+  significant loss. Don't conflate the two when reading this batch.

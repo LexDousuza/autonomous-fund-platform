@@ -1,4 +1,4 @@
-trading_date: "2026-07-21"
+trading_date: "2026-08-04"
 
 buckets:
   reserve_bucket: 10000.0
@@ -8,7 +8,13 @@ risk_limits:
   max_daily_loss: 1000.0
   max_trades_per_day: 50
   stop_new_entries_after: "14:45"
-  force_square_off_at: "15:15"
+  force_square_off_at: "15:10"
+  # Kill switch: after this many consecutive broker errors / genuine
+  # order rejections (not sizing/guardrail/exposure skips), flatten every
+  # open position via the existing core.execution.kill_switch.flatten_all
+  # and block further entries for the rest of the session.
+  max_consecutive_broker_errors: 3
+  max_consecutive_order_rejections: 5
 
 execution_mode: "paper"
 

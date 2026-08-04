@@ -1,11 +1,14 @@
 """
-Angel One (SmartAPI) market-data transport - historical candle data only.
+Angel One (SmartAPI) market-data transport - historical candles plus a
+poll-based LTP live feed.
 
-Angel One is deliberately scoped to historical data in this platform;
-Kite remains the only live/paper trading broker (see
-``core/market_data/factory.py``'s ``"angelone"`` branch, which refuses
-``mode="live"``/``mode="paper"`` outright). This module has no order
-placement and is never wired into ``core/broker/``.
+Angel One is never a broker (order placement) in this platform - Kite/
+Groww remain the only ones, and this module is never wired into
+``core/broker/``. It can now serve as a ``market_data_provider`` for a
+*paper* session, though (see ``core/market_data/angelone_live_feed.py``
+and ``core/market_data/factory.py``'s ``"angelone"`` branch) - Angel One
+has no separate paper/sandbox market-data mode, same as Groww/Kite, so
+"live" here just means real quotes, not permission to place real orders.
 
 Wraps the official ``smartapi-python`` SDK (``SmartApi.SmartConnect``).
 Verified against the installed SDK's own source
@@ -36,7 +39,29 @@ Verified against the installed SDK's own source
   ``instrumenttype == ""`` for plain cash-equity entries (verified by
   fetching and inspecting the real file: e.g. RELIANCE on NSE is
   ``{"token": "2885", "symbol": "RELIANCE-EQ", "name": "RELIANCE",
-  "instrumenttype": "", "exch_seg": "NSE", ...}``).
+  "instrumenttype": "", "exch_seg": "NSE", ...}``). ``ltpData`` also
+  needs the exact ``tradingsymbol`` string (``"RELIANCE-EQ"``, the
+  ``symbol`` field) alongside the token, so the scrip cache keeps both.
+- ``ltpData(exchange, tradingsymbol, symboltoken)``'s response:
+  ``{"status": true, "message": "SUCCESS", "errorcode": "", "data":
+  {"exchange", "tradingsymbol", "symboltoken", "open", "high", "low",
+  "close", "ltp"}}`` (verified against the SmartAPI docs' own example
+  response). Unlike Groww/Kite's quote payloads, there is no volume or
+  trade-timestamp field at all - ``AngelOneLiveMarketDataFeed`` fills
+  those in itself; see its docstring for what that means.
+- ``getMarketData(mode, exchangeTokens)`` (the bulk ``/quote`` endpoint,
+  used by ``get_ltp_batch`` for the candidate prescreen - see
+  ``core/market_data/candidate_prescreen.py``) is a genuinely different
+  wire format from ``ltpData`` despite both returning an LTP: request is
+  ``{"mode": "LTP", "exchangeTokens": {"NSE": ["881", ...]}}`` (up to 50
+  tokens per exchange per request - SmartAPI's documented per-request
+  cap, verified against the SmartAPI forum's own worked example, along
+  with the "1 request per second" rate limit), response is
+  ``{"status": true, ..., "data": {"fetched": [{"exchange",
+  "tradingSymbol", "symbolToken", "ltp"}, ...], "unfetched": [...]}}`` -
+  note ``tradingSymbol``/``symbolToken`` are camelCase here, unlike
+  ``ltpData``'s snake_case ``tradingsymbol``/``symboltoken`` - genuinely
+  a different endpoint's convention, not a typo.
 - The SDK requires several device-identifying headers
   (``X-ClientLocalIP``/``X-ClientPublicIP``/``X-MACAddress``) that it
   fills with its own hardcoded fallback values regardless of the real
@@ -49,10 +74,15 @@ Verified against the installed SDK's own source
 from __future__ import annotations
 
 import json
+import logging
+import re
+import time
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+import logzero
 from SmartApi import SmartConnect
 from SmartApi.smartExceptions import PermissionException, TokenException
 
@@ -66,6 +96,42 @@ from core.utils.resilience import CircuitBreaker, CircuitOpenError, RetryPolicy,
 from core.utils.totp import generate_totp
 
 _RETRY_POLICY = RetryPolicy()
+
+# smartapi-python's SmartConnect.__init__ unconditionally does
+# `logzero.logfile(f"logs/{today}/app.log", loglevel=logging.ERROR)` and,
+# on ANY request exception (timeout, DNS failure, etc.), logs the full
+# request headers verbatim - including the bearer access token and the
+# X-PrivateKey API key - via `logger.error(f"...Headers: {headers}...")`
+# in its own `_request()` (verified in the installed SDK's source, not
+# guessed). This has already written a real token/key to
+# logs/<date>/app.log in plaintext. Two independent mitigations, applied
+# once at import time (before this module ever constructs a
+# SmartConnect): stop the SDK from creating that file handler at all, and
+# redact secret-shaped values from every record its shared `logzero.logger`
+# emits (covers logzero's own default stderr handler too, which is not
+# gated by `logfile()` and could otherwise leak into cron-redirected
+# output). This is a mitigation for a third-party SDK's behavior, not a
+# statement that this module itself ever logs secrets - it doesn't.
+_SECRET_KEYS = ("Authorization", "X-PrivateKey", "access_token", "api_key", "feed_token", "refresh_token")
+_SECRET_VALUE_PATTERN = re.compile(
+    r"(['\"](?:" + "|".join(_SECRET_KEYS) + r")['\"]\s*:\s*['\"])[^'\"]*(['\"])",
+    re.IGNORECASE,
+)
+
+
+class _SecretRedactingFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.msg, str):
+            record.msg = _SECRET_VALUE_PATTERN.sub(r"\1***REDACTED***\2", record.msg)
+        return True
+
+
+def _harden_smartapi_logging() -> None:
+    logzero.logfile = lambda *args, **kwargs: None  # SmartConnect() calls this itself, every time
+    logzero.logger.addFilter(_SecretRedactingFilter())
+
+
+_harden_smartapi_logging()
 
 # Public, unauthenticated instrument master - not part of the SmartAPI
 # SDK itself. ~35MB / 160k+ rows across all exchanges/segments; fetched
@@ -85,6 +151,11 @@ MAX_DAYS_PER_INTERVAL = {
     "ONE_HOUR": 400,
     "ONE_DAY": 2000,
 }
+
+# SmartAPI's documented per-request cap for the bulk /quote endpoint
+# (getMarketData) and its rate limit - see get_ltp_batch.
+LTP_BATCH_SIZE = 50
+LTP_BATCH_PACING_SECONDS = 1.0
 
 
 def _is_retryable(exc: Exception) -> bool:
@@ -174,7 +245,14 @@ class AngelOneMarketDataTransport:
         self._config = config
         self._circuit_breaker = CircuitBreaker()
         self._client = client if client is not None else self._authenticate(config)
-        self._symbol_token_cache: dict[tuple[str, str], str] = {}
+        # (exchange, name) -> (symboltoken, tradingsymbol)
+        self._scrip_cache: dict[tuple[str, str], tuple[str, str]] = {}
+        # Same shape, but for index rows (instrumenttype == "AMXIDX", e.g. India VIX) -
+        # kept separate from _scrip_cache so a cash-equity lookup can never
+        # accidentally resolve an index, or vice versa. Both populate from the
+        # same single scrip-master fetch - see _load_scrip_master.
+        self._index_scrip_cache: dict[tuple[str, str], tuple[str, str]] = {}
+        self._scrip_master_loaded = False
 
     def _authenticate(self, config: AngelOneMarketDataTransportConfig) -> SmartConnect:
         def do_auth() -> SmartConnect:
@@ -210,7 +288,7 @@ class AngelOneMarketDataTransport:
     # -- public operations -------------------------------------------
 
     def get_historical_candles(
-        self, symbol: str, exchange: str, interval: str, from_date: str, to_date: str
+        self, symbol: str, exchange: str, interval: str, from_date: str, to_date: str, *, is_index: bool = False
     ) -> list[list[Any]]:
         """
         Fetch historical OHLCV candles for ``symbol`` on ``exchange``.
@@ -220,8 +298,17 @@ class AngelOneMarketDataTransport:
         One's required format, verified from the docs). Resolves
         ``symbol``/``exchange`` to a ``symboltoken`` via the scrip master
         first (required by ``getCandleData``).
+
+        ``is_index=True`` resolves via the separate index scrip cache
+        instead (e.g. ``symbol="INDIA VIX"``, ``exchange="NSE"``) - an
+        index's scrip-master row has ``instrumenttype == "AMXIDX"``, not
+        the cash-equity ``""``, so it's invisible to the default lookup.
+        Default ``False`` preserves every existing caller's behavior
+        exactly.
         """
-        symbol_token = self._resolve_symbol_token(symbol, exchange)
+        symbol_token = self._resolve_index_token(symbol, exchange) if is_index else self._resolve_symbol_token(
+            symbol, exchange
+        )
         params = {
             "exchange": exchange,
             "symboltoken": symbol_token,
@@ -233,25 +320,110 @@ class AngelOneMarketDataTransport:
         response = _raise_if_status_false(response, "get_historical_candles", is_auth=False)
         return response.get("data") or []
 
+    def get_ltp(self, symbol: str, exchange: str) -> dict[str, Any]:
+        """
+        Fetch the last-traded-price snapshot for ``symbol`` on
+        ``exchange`` (see module docstring for the verified response
+        shape - no volume or trade-timestamp field).
+        """
+        symbol_token, trading_symbol = self._resolve_scrip(symbol, exchange)
+        response = self._call(
+            "get_ltp", lambda: self._client.ltpData(exchange, trading_symbol, symbol_token)
+        )
+        response = _raise_if_status_false(response, "get_ltp", is_auth=False)
+        return response.get("data") or {}
+
+    def get_ltp_batch(
+        self,
+        symbols: list[tuple[str, str]],
+        sleep_fn: Callable[[float], None] = time.sleep,
+    ) -> dict[tuple[str, str], float]:
+        """
+        Fetch LTP for many ``(symbol, exchange)`` pairs via the bulk
+        ``/quote`` endpoint (see module docstring for the verified
+        request/response shape), batching internally at
+        ``LTP_BATCH_SIZE`` per request and pacing ``LTP_BATCH_PACING_SECONDS``
+        between requests (SmartAPI's documented rate limit for this
+        endpoint) - callers never need to know about either limit.
+
+        Best-effort, not fail-fast: a symbol this transport can't resolve
+        to a token, or one SmartAPI reports in ``unfetched``, is simply
+        absent from the returned dict rather than raising - one bad
+        symbol in a large candidate list shouldn't lose every other
+        symbol's price. Only a genuine request-level failure (auth,
+        network, a non-2xx/``status: false`` response) raises, via the
+        same ``_call``/``_raise_if_status_false`` path every other method
+        here uses.
+        """
+        token_to_key: dict[str, tuple[str, str]] = {}
+        tokens_by_exchange: dict[str, list[str]] = {}
+        for symbol, exchange in symbols:
+            try:
+                token, _trading_symbol = self._resolve_scrip(symbol, exchange)
+            except UnsupportedSymbolError:
+                continue
+            token_to_key[token] = (symbol, exchange)
+            tokens_by_exchange.setdefault(exchange, []).append(token)
+
+        result: dict[tuple[str, str], float] = {}
+        is_first_batch = True
+        for exchange, tokens in tokens_by_exchange.items():
+            for start in range(0, len(tokens), LTP_BATCH_SIZE):
+                if not is_first_batch:
+                    sleep_fn(LTP_BATCH_PACING_SECONDS)
+                is_first_batch = False
+
+                batch = tokens[start : start + LTP_BATCH_SIZE]
+                response = self._call(
+                    "get_ltp_batch",
+                    lambda batch=batch, exchange=exchange: self._client.getMarketData(
+                        "LTP", {exchange: batch}
+                    ),
+                )
+                response = _raise_if_status_false(response, "get_ltp_batch", is_auth=False)
+                data = response.get("data") or {}
+                for item in data.get("fetched") or []:
+                    key = token_to_key.get(str(item.get("symbolToken")))
+                    if key is not None and "ltp" in item:
+                        result[key] = float(item["ltp"])
+
+        return result
+
     # -- internals -----------------------------------------------------------
 
     def _resolve_symbol_token(self, symbol: str, exchange: str) -> str:
+        """Resolve ``symbol``/``exchange`` to Angel One's ``symboltoken`` alone."""
+        return self._resolve_scrip(symbol, exchange)[0]
+
+    def _resolve_scrip(self, symbol: str, exchange: str) -> tuple[str, str]:
         """
-        Resolve ``symbol``/``exchange`` to Angel One's ``symboltoken``,
-        fetching and caching the full scrip master the first time it's
-        needed. Cash-equity entries only (``instrumenttype == ""``) -
-        excludes F&O contracts that might otherwise share the same
-        ``name``.
+        Resolve ``symbol``/``exchange`` to Angel One's ``(symboltoken,
+        tradingsymbol)``, fetching and caching the full scrip master the
+        first time it's needed. Cash-equity entries only
+        (``instrumenttype == ""``) - excludes F&O contracts that might
+        otherwise share the same ``name``.
         """
-        if not self._symbol_token_cache:
+        if not self._scrip_master_loaded:
             self._load_scrip_master()
 
-        token = self._symbol_token_cache.get((exchange, symbol))
-        if token is None:
+        scrip = self._scrip_cache.get((exchange, symbol))
+        if scrip is None:
             raise UnsupportedSymbolError(
                 f"Angel One scrip master has no cash-equity entry for '{exchange}:{symbol}'"
             )
-        return token
+        return scrip
+
+    def _resolve_index_token(self, symbol: str, exchange: str) -> str:
+        """Resolve ``symbol``/``exchange`` (e.g. ``"INDIA VIX"``/``"NSE"``) to an index's ``symboltoken``."""
+        if not self._scrip_master_loaded:
+            self._load_scrip_master()
+
+        scrip = self._index_scrip_cache.get((exchange, symbol))
+        if scrip is None:
+            raise UnsupportedSymbolError(
+                f"Angel One scrip master has no index entry for '{exchange}:{symbol}'"
+            )
+        return scrip[0]
 
     def _load_scrip_master(self) -> None:
         def fetch() -> list[dict[str, Any]]:
@@ -267,5 +439,10 @@ class AngelOneMarketDataTransport:
             raise MarketDataTransportError(f"Angel One scrip master fetch failed: {exc}") from exc
 
         for row in rows:
-            if row.get("instrumenttype") == "" and row.get("exch_seg") and row.get("name"):
-                self._symbol_token_cache[(row["exch_seg"], row["name"])] = row["token"]
+            if not row.get("exch_seg") or not row.get("name"):
+                continue
+            if row.get("instrumenttype") == "":
+                self._scrip_cache[(row["exch_seg"], row["name"])] = (row["token"], row["symbol"])
+            elif row.get("instrumenttype") == "AMXIDX":
+                self._index_scrip_cache[(row["exch_seg"], row["name"])] = (row["token"], row["symbol"])
+        self._scrip_master_loaded = True

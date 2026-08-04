@@ -81,6 +81,29 @@ class AngelOneHistoricalMarketDataFeedTests(unittest.TestCase):
         self.assertIn(("RELIANCE", "NSE", "ONE_DAY", expected_from, expected_to), transport.calls)
         self.assertIn(("TCS", "NSE", "ONE_DAY", expected_from, expected_to), transport.calls)
 
+    def test_calls_are_paced_between_instruments_not_before_the_first(self) -> None:
+        # getCandleData is rate-limited to 3 req/sec (see module docstring) -
+        # firing every instrument's call back-to-back trips that limit.
+        transport = FakeHistoricalTransport()
+        transport.set_response("RELIANCE", [_candle("2026-01-01T09:15:00+05:30")])
+        transport.set_response("TCS", [_candle("2026-01-01T09:15:00+05:30")])
+        transport.set_response("INFY", [_candle("2026-01-01T09:15:00+05:30")])
+        sleep_calls: list[float] = []
+
+        AngelOneHistoricalMarketDataFeed(
+            transport=transport,  # type: ignore[arg-type]
+            instruments=[
+                AngelOneHistoricalInstrument(symbol="RELIANCE", exchange="NSE"),
+                AngelOneHistoricalInstrument(symbol="TCS", exchange="NSE"),
+                AngelOneHistoricalInstrument(symbol="INFY", exchange="NSE"),
+            ],
+            settings=_settings(),
+            pacing_seconds=0.4,
+            sleep_fn=sleep_calls.append,
+        )
+
+        self.assertEqual(sleep_calls, [0.4, 0.4])  # 2 sleeps between 3 sequential calls
+
     def test_get_history_returns_all_candles_for_symbol_regardless_of_subscription(self) -> None:
         transport = FakeHistoricalTransport()
         transport.set_response(

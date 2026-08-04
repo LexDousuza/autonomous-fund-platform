@@ -30,13 +30,16 @@ def make_allocation_plan(max_capital_per_trade: float = 15000.0) -> PortfolioAll
     )
 
 
-def make_request(price: float, max_capital_per_trade: float = 15000.0) -> PositionSizingRequest:
+def make_request(
+    price: float, max_capital_per_trade: float = 15000.0, lot_size: int = 1
+) -> PositionSizingRequest:
     return PositionSizingRequest(
         symbol="RELIANCE",
         exchange="NSE",
         side=SignalSide.BUY,
         price=price,
         portfolio_allocation_plan=make_allocation_plan(max_capital_per_trade),
+        lot_size=lot_size,
     )
 
 
@@ -118,6 +121,44 @@ class PositionSizingEngineTests(unittest.TestCase):
         second = self.engine.size(request)
 
         self.assertEqual(first, second)
+
+    def test_lot_size_one_is_byte_identical_to_default(self) -> None:
+        # lot_size=1 (the default) must reproduce today's plain floor(budget/price).
+        request = make_request(price=2600.0, max_capital_per_trade=15000.0, lot_size=1)
+
+        decision = self.engine.size(request)
+
+        self.assertEqual(decision.approved_quantity, 5)
+        self.assertEqual(decision.capital_used, 13000.0)
+
+    def test_lot_size_rounds_down_to_whole_lots(self) -> None:
+        # budget 15000, price 100/unit, lot_size 50 -> 15000/(100*50)=3.0 lots -> 150 units
+        request = make_request(price=100.0, max_capital_per_trade=15000.0, lot_size=50)
+
+        decision = self.engine.size(request)
+
+        self.assertEqual(decision.approved_quantity, 150)
+        self.assertEqual(decision.max_affordable_quantity, 150)
+        self.assertEqual(decision.capital_used, 15000.0)
+        self.assertEqual(decision.reason, "approved")
+
+    def test_lot_size_rounds_down_on_remainder(self) -> None:
+        # budget 15000, price 100/unit, lot_size 40 -> 15000/(100*40)=3.75 lots -> floor to 3 -> 120 units
+        request = make_request(price=100.0, max_capital_per_trade=15000.0, lot_size=40)
+
+        decision = self.engine.size(request)
+
+        self.assertEqual(decision.approved_quantity, 120)
+        self.assertEqual(decision.capital_used, 12000.0)
+
+    def test_lot_size_too_large_for_one_lot_is_rejected(self) -> None:
+        # one lot alone (100 * 500 = 50000) exceeds the 15000 budget
+        request = make_request(price=100.0, max_capital_per_trade=15000.0, lot_size=500)
+
+        decision = self.engine.size(request)
+
+        self.assertEqual(decision.approved_quantity, 0)
+        self.assertEqual(decision.reason, "price_exceeds_capital_per_trade")
 
 
 if __name__ == "__main__":

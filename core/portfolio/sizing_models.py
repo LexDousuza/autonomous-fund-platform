@@ -16,6 +16,11 @@ class PositionSizingRequest:
     ``risk_metadata``/``strategy_metadata`` are optional pass-through
     context (e.g. a signal's own metadata) that a future, more elaborate
     sizing engine could use; V1 does not read them.
+
+    ``lot_size`` is ``1`` for a cash-equity request (every existing call
+    site, byte-identical). An options request sets its instrument's real
+    lot size - the resulting quantity is always a whole multiple of it
+    (see ``PositionSizingEngine.size``).
     """
 
     symbol: str
@@ -25,6 +30,7 @@ class PositionSizingRequest:
     portfolio_allocation_plan: PortfolioAllocationPlan
     risk_metadata: dict[str, Any] = field(default_factory=dict)
     strategy_metadata: dict[str, Any] = field(default_factory=dict)
+    lot_size: int = 1
 
 
 @dataclass(slots=True)

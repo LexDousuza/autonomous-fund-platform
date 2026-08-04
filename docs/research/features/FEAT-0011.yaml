@@ -1,0 +1,76 @@
+id: FEAT-0011
+feature: beta
+hypothesis: >
+  A stock's trailing 60-day rolling beta against NIFTY predicts its
+  forward 5-day return.
+economic_mechanism: >
+  Betting-against-beta (Frazzini/Pedersen) - leverage-constrained
+  investors overpay for high-beta stocks (a cheap way to get market
+  exposure without leverage), historically causing LOW-beta stocks to
+  earn better risk-adjusted returns. NOTE: this test found the opposite
+  sign (positive IC, high beta -> higher forward return) - see reason
+  below for why that doesn't necessarily contradict the anomaly.
+question_2_redundancy_check: >
+  The first feature in this batch that looks at a stock's relationship
+  to something OTHER than its own history (momentum_return,
+  realized_volatility, atr_pct, gap_pct, relative_volume, and
+  session_vwap_distance are all stock-in-isolation measures) - a
+  genuinely different information dimension, not a variant of anything
+  else tested.
+
+methodology: cross-sectional daily IC, 122-symbol universe (real NSE corporate-actions table applied - see FEAT-0001). Market proxy is NIFTY's own daily close (core.analytics.benchmark.load_index_spot_series), date-aligned per symbol.
+dataset: data/processed/nse_daily_12mo.csv + data/processed/nse_index_options_iv_history.csv (NIFTY spot only)
+period: 2025-07 to 2026-07 (~12 months)
+parameters: {lookback_days: 60, forward_horizon_days: 5}
+
+bootstrap_ci:
+  point_estimate: 0.0455
+  lower: 0.0198
+  upper: 0.0716
+  n_resamples: 2000
+p_value: 0.0055
+fdr_corrected: true   # Benjamini-Hochberg across all 11 Phase A features, fdr=0.05 - SURVIVES
+n_observations: 176
+
+git_commit: b32f494a980aa65e74b7e5753caa8dae3237e725
+data_snapshot_id: null
+python_version: "3.14.2"
+random_seed: 0
+
+date_opened: 2026-07-30
+date_decided: 2026-07-30
+decision: fail
+reason: >
+  UPDATED 2026-07-30 (Phase 2 robustness -
+  docs/research/validation_audit_phase2_features.md). Failing the
+  hypothesis AS STATED, not the existence of a real effect - see below,
+  this is the important distinction. Phase A's flagged trend-confound
+  concern is RESOLVED, but not the way expected: split observations by
+  whether NIFTY's own trailing 20-day return was positive (UP-regime,
+  n=73 days) or negative (DOWN-regime, n=83 days) as of that date.
+  UP-regime: IC=-0.033, CI=[-0.060,-0.006] (negative), p=0.058.
+  DOWN-regime: IC=+0.109, CI=[+0.063,+0.155], p=0.0000 (strong). This
+  is NOT the signature of simple trend-amplification (which would go
+  positive in up-markets, negative in down-markets) - it's closer to a
+  REBOUND effect: high-beta stocks show stronger forward returns
+  specifically FOLLOWING down-market conditions, and if anything the
+  opposite (negative) relationship in up-markets. That rules out the
+  original trend-confound worry, but it also means the stated hypothesis
+  (betting-against-beta: LOW beta should outperform, unconditionally) is
+  not what's happening - the real pattern is regime-conditional in a way
+  this experiment's hypothesis never specified. Phase A's unconditional
+  "pass" was real but was actually measuring a blend dominated by the
+  down-regime relationship (which happened to be strong and roughly
+  balanced in day-count with up-regime, 83 vs 73, in this ~12mo window).
+  Quarterly walk-forward: 2 of 4 quarters individually significant (Q1,
+  Q4), not uniform. Holdout: unusually, the second half of the window
+  (HOLDOUT) is more significant than the first (DEV) - consistent with
+  down-regime days concentrating later in this specific window, not
+  evidence of a strengthening effect over time on its own. Parameter
+  sensitivity is fully robust (lookback_days 30/45/90/120 all survive).
+  RECOMMENDATION: don't re-test "beta predicts return" as originally
+  framed - open a new, narrower registry entry for "beta predicts
+  rebound return specifically following down-market regimes" if this is
+  pursued further; that is a different, more specific claim than this
+  entry tested, and deserves its own hypothesis/mechanism/validation
+  rather than being folded into this one's pass/fail.

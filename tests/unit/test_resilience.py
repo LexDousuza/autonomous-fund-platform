@@ -108,5 +108,34 @@ class CircuitBreakerTests(unittest.TestCase):
         raise ValueError("boom")
 
 
+class CircuitBreakerStatusTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.now = 0.0
+        self.breaker = CircuitBreaker(failure_threshold=2, cooldown_seconds=10.0, clock=lambda: self.now)
+
+    def test_closed_and_zero_failures_initially(self) -> None:
+        self.assertFalse(self.breaker.is_open)
+        self.assertEqual(self.breaker.consecutive_failures, 0)
+
+    def test_is_open_true_once_threshold_hit(self) -> None:
+        for _ in range(2):
+            with self.assertRaises(ValueError):
+                self.breaker.call(self._raise)
+        self.assertTrue(self.breaker.is_open)
+        self.assertEqual(self.breaker.consecutive_failures, 2)
+
+    def test_is_open_false_again_after_cooldown_without_calling(self) -> None:
+        for _ in range(2):
+            with self.assertRaises(ValueError):
+                self.breaker.call(self._raise)
+        self.now += 10.0
+        # is_open reflects cooldown elapsing even without a new call() -
+        # a pure read, no side effect on the breaker's own state.
+        self.assertFalse(self.breaker.is_open)
+
+    def _raise(self) -> None:
+        raise ValueError("boom")
+
+
 if __name__ == "__main__":
     unittest.main()

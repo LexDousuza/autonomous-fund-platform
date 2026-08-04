@@ -21,10 +21,22 @@ class DailyCapitalBuckets:
 
 @dataclass(slots=True)
 class DailyRiskLimits:
+    """
+    ``max_consecutive_broker_errors``/``max_consecutive_order_rejections``
+    gate the kill-switch (see ``core.risk.session_guardrails.SessionRiskGuardrails``
+    and ``core.execution.orchestrator``'s ``record_broker_error``/
+    ``record_order_rejection`` calls): ``None`` (the default) means the
+    feature is off, matching every mandate that predates it - a single
+    nullable threshold per counter, not a separate enable-flag, since
+    "unset" already means "off" unambiguously.
+    """
+
     max_daily_loss: float
     max_trades_per_day: int
     stop_new_entries_after: str | None = None
     force_square_off_at: str | None = None
+    max_consecutive_broker_errors: int | None = None
+    max_consecutive_order_rejections: int | None = None
 
 
 RISK_APPETITES = {"conservative", "moderate", "aggressive"}
@@ -85,11 +97,21 @@ def load_daily_mandate(path: str | Path) -> DailyMandate:
             intraday_bucket=float(bucket_raw["intraday_bucket"]),
         )
 
+        max_consecutive_broker_errors = risk_raw.get("max_consecutive_broker_errors")
+        max_consecutive_order_rejections = risk_raw.get("max_consecutive_order_rejections")
         risk_limits = DailyRiskLimits(
             max_daily_loss=float(risk_raw["max_daily_loss"]),
             max_trades_per_day=int(risk_raw["max_trades_per_day"]),
             stop_new_entries_after=risk_raw.get("stop_new_entries_after"),
             force_square_off_at=risk_raw.get("force_square_off_at"),
+            max_consecutive_broker_errors=(
+                int(max_consecutive_broker_errors) if max_consecutive_broker_errors is not None else None
+            ),
+            max_consecutive_order_rejections=(
+                int(max_consecutive_order_rejections)
+                if max_consecutive_order_rejections is not None
+                else None
+            ),
         )
 
         mandate = DailyMandate(
@@ -119,6 +141,8 @@ EDITABLE_MANDATE_FIELDS: dict[str, bool] = {
     "stop_new_entries_after": True,
     "force_square_off_at": True,
     "risk_appetite": True,
+    "max_consecutive_broker_errors": False,
+    "max_consecutive_order_rejections": False,
 }
 
 

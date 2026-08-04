@@ -14,9 +14,10 @@ from datetime import date, timedelta
 
 from core.allocations.daily_mandate import RISK_APPETITES
 
-_SUPPORTED_MARKET_DATA_PROVIDERS = {"memory", "groww"}
+_SUPPORTED_MARKET_DATA_PROVIDERS = {"memory", "groww", "kite"}
 _DEFAULT_HISTORICAL_LOOKBACK_DAYS = 30
 _DEFAULT_HISTORICAL_INTERVAL = "1day"  # real growwapi CANDLE_INTERVAL_DAY value
+_DEFAULT_STRATEGY_CONFIG_PATH = "config/strategies/simple_breakout_momentum.yaml"
 
 
 @dataclass(slots=True)
@@ -25,13 +26,20 @@ class PaperTraderConfig:
     Fully validated, typed configuration for one paper-trader invocation.
 
     ``market_data_provider="memory"`` (the default) is the safe local/dev
-    path: synthetic demo bars, no network, no credentials. ``"groww"``
-    fetches real historical candles for capital/risk-aware bucket
-    selection to run against - see
+    path: synthetic demo bars, no network, no credentials. ``"groww"``/
+    ``"kite"`` fetch real historical candles for capital/risk-aware
+    bucket selection to run against - see
     ``apps/paper_trader/main.py:build_paper_session``. Bucket selection
-    itself always runs, regardless of provider: it is a pure function of
-    whatever price history is available (see
+    itself always runs (unless the selected strategy's ``candidate_profile``
+    sets ``fixed_universe_segment``), regardless of provider: it is a
+    pure function of whatever price history is available (see
     ``core/market_data/bucket_selector.py``), synthetic or real.
+
+    ``strategy_config_path`` defaults to the same strategy and params this
+    app has always hardcoded (``simple_breakout_momentum``, no
+    ``candidate_profile``) - see ``config/strategies/simple_breakout_momentum.yaml``,
+    whose params exactly match that strategy's own built-in defaults, so
+    nothing existing changes behavior.
     """
 
     market_data_provider: str
@@ -40,10 +48,15 @@ class PaperTraderConfig:
     historical_from_date: str
     historical_to_date: str
     historical_interval: str
+    strategy_config_path: str = _DEFAULT_STRATEGY_CONFIG_PATH
 
     @property
     def requires_groww_credentials(self) -> bool:
         return self.market_data_provider == "groww"
+
+    @property
+    def requires_kite_credentials(self) -> bool:
+        return self.market_data_provider == "kite"
 
 
 def _parse_optional_float_env(name: str) -> float | None:
@@ -77,6 +90,10 @@ def load_paper_trader_config_from_env() -> PaperTraderConfig:
     - ``PAPER_HISTORICAL_INTERVAL``: candle interval for Groww historical
       candles (default ``"1day"``; must be a real growwapi candle-interval
       string, e.g. ``"1day"``, ``"5minute"``).
+    - ``PAPER_STRATEGY_CONFIG_PATH``: path to a ``config/strategies/*.yaml``
+      file (see ``apps/live_trader/config.py``'s identically-shaped
+      ``LIVE_STRATEGY_CONFIG_PATH``). Defaults to
+      ``simple_breakout_momentum.yaml`` - today's hardcoded behavior.
 
     Raises ``ValueError`` for an unsupported provider or risk appetite,
     or a non-numeric ``PAPER_INTRADAY_CAPITAL``.
@@ -106,6 +123,9 @@ def load_paper_trader_config_from_env() -> PaperTraderConfig:
     historical_interval = (
         os.environ.get("PAPER_HISTORICAL_INTERVAL", "").strip() or _DEFAULT_HISTORICAL_INTERVAL
     )
+    strategy_config_path = (
+        os.environ.get("PAPER_STRATEGY_CONFIG_PATH", "").strip() or _DEFAULT_STRATEGY_CONFIG_PATH
+    )
 
     return PaperTraderConfig(
         market_data_provider=market_data_provider,
@@ -114,4 +134,5 @@ def load_paper_trader_config_from_env() -> PaperTraderConfig:
         historical_from_date=historical_from_date,
         historical_to_date=historical_to_date,
         historical_interval=historical_interval,
+        strategy_config_path=strategy_config_path,
     )

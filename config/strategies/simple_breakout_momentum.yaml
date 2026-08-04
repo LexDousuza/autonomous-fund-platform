@@ -11,3 +11,14 @@ params:
   min_volume_multiplier: 1.0
   allow_multiple_entries: false
   quantity_per_trade: 5
+
+# No candidate_profile here (see core/market_data/candidate_profile.py) -
+# deliberately left at today's exact generic selection behavior
+# (affordability + volatility ceiling, no liquidity/trend pre-filter).
+# The new momentum/pullback/ma_crossover strategies (config/strategies/)
+# opt into the stricter liquidity+uptrend screen from day one instead;
+# retrofitting it here would change this already-shipped strategy's
+# live behavior (it could now select zero candidates on a session with
+# under trend_lookback_bars of price history) without a deliberate
+# decision to accept that.
+candidate_profile: {}

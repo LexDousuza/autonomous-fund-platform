@@ -1,0 +1,67 @@
+id: EXP-0024
+
+hypothesis: >
+  vertical_credit_spread (BANKNIFTY, PUT side) converts the measured VRP
+  (EXP-0002) into real, risk-defined strategy PnL at a 15-day max hold -
+  the second hold length tested for BANKNIFTY, completing the same 2x2
+  (symbol x hold length) grid as EXP-0021/EXP-0022 (NIFTY).
+
+economic_mechanism: >
+  Same as EXP-0023 (10-day hold, same symbol): theta-decay-truncation
+  hypothesis, tested at an even longer hold.
+
+dataset: data/processed/nse_index_options_iv_history.csv
+universe: [BANKNIFTY]
+period:
+  train_or_dev: "2016-01-01 to 2023-12-31 (188 trades): point=1.3582, CI=[0.9416,1.9915], p=0.165 - fails"
+  holdout: "2024-01-01 to 2026-07-24 (50 trades): point=0.8285, CI=[0.3351,2.1106], p=0.74 - fails"
+
+parameters:
+  option_type: PUT
+  expiry_horizon_days: 7
+  short_leg_target_delta: 0.25
+  wing_offset_strikes: 2
+  iv_rv_ratio_threshold: 1.2
+  min_net_credit_pct_of_width: 10.0
+  historical_vol_lookback_bars: 20
+  max_holding_days: 15
+  capital: 5000000.0
+  per_leg_capital: 10000.0
+  lot_size: 75
+  slippage_bps: 5.0
+
+bootstrap_ci:
+  point_estimate: 0.8285218574823193   # profit factor; 50 closed leg round-trips, HOLDOUT window
+  lower: 0.3351412476880053
+  upper: 2.1106177808681923
+  n_resamples: 2000
+p_value: 0.74
+fdr_corrected: false   # not run alongside a broader FDR batch this round - see reason
+kill_criteria_result:
+  ci_lower_bound_above_1: false
+  fdr_p_under_threshold: false
+  holdout_drop_under_25pct: false   # holdout PF (0.829) vs dev PF (1.358): 39.0% drop - BREACHES the 25% threshold, worse than the 10-day breach (29.0%)
+  walk_forward_sign_consistent: false   # 0/8 walk-forward years reach significance; 5/8 point estimates >1 (still weaker than NIFTY's 7/8)
+
+git_commit: 7507cb254900f4f6106823bc6b02c06308d77c51
+config_version: config/strategies/vertical_credit_spread.yaml
+data_snapshot_id: sha256:e5781844a58c6f81b1d594ca5d695a2f94ee8c79a373fc80a8c1dacd9badba6b
+python_version: "3.14.2"
+random_seed: 0
+
+date_opened: 2026-08-03
+date_decided: 2026-08-03
+decision: fail
+reason: >
+  docs/research/validation_audit_phase2_longer_hold.md: full Phase 2
+  battery at a 15-day max hold. BANKNIFTY's holdout PF (0.829) stays flat
+  and below 1 across all three tested hold lengths (0.813 @5d, 0.831 @10d,
+  0.829 @15d) even as its dev PF keeps rising with hold length the same way
+  NIFTY's does (1.023 -> 1.170 -> 1.358) - the DEV/HOLDOUT divergence gets
+  WORSE with a longer hold (25% -> 29% -> 39% drop), the opposite of what a
+  real, generalizing edge should do. This is the clearest evidence in the
+  whole longer-hold investigation that hold length is not the fix for
+  credit_spread on BANKNIFTY specifically - see
+  validation_audit_phase2_longer_hold.md's per-symbol verdict section.
+
+  Should not proceed to Tier B as currently designed.

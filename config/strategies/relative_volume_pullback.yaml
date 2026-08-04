@@ -1,0 +1,22 @@
+strategy:
+  name: relative_volume_pullback
+
+params:
+  trend_lookback_bars: 20
+  pullback_lookback_bars: 5
+  min_pullback_pct: 0.3
+  volume_lookback_bars: 10
+  min_volume_multiplier: 1.3
+  allow_multiple_entries: false
+
+# The new variable this hybrid actually tests: "was this symbol unusually
+# active recently" (see core/market_data/universe_screener.py's
+# screen_by_relative_volume), not the generic "is it liquid in general"
+# screen ma_crossover/momentum/pullback already use. Deliberately NOT
+# combined with require_liquidity_and_uptrend here - isolate the one new
+# variable being tested first, add the other screen on top only if this
+# alone shows something worth layering further.
+candidate_profile:
+  require_relative_volume: true
+  relative_volume_multiplier: 1.5
+  relative_volume_trailing_days: 10

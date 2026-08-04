@@ -1,0 +1,30 @@
+id: EXP-0010
+hypothesis: A pullback within an established uptrend continues the trend on resumption.
+economic_mechanism: >
+  Within an established uptrend, a short-term dip is hypothesized to be
+  profit-taking/noise rather than a trend reversal - the strategy waits
+  for price to turn back up (a green candle above the previous close)
+  before betting on trend resumption, capturing the continuation without
+  chasing the initial breakout. See docs/strategy-specs/pullback.md.
+
+dataset: data/processed/nse_5min_dev.csv
+period: {train_or_dev: "nse_5min_dev.csv, 123 trading days", holdout: null}
+parameters: {trend_lookback_bars: 20, pullback_lookback_bars: 3, min_pullback_pct: 0.3}
+
+bootstrap_ci: {point_estimate: 0.2434413941337484, lower: 0.1713322878249429, upper: 0.3365775038832722, n_resamples: 2000}
+p_value: 0.0
+fdr_corrected: true   # significant, but CI is below 1 (a confirmed loss, not a confirmed edge) - see reason below
+kill_criteria_result: {ci_lower_bound_above_1: false, fdr_p_under_threshold: true, holdout_drop_under_25pct: null, walk_forward_sign_consistent: null}
+
+git_commit: b32f494a980aa65e74b7e5753caa8dae3237e725
+config_version: config/strategies/pullback.yaml
+data_snapshot_id: sha256:a172d0e259f144091bda8b63db988e755a97fb2245c7a9cb9a73dce1825f8177
+python_version: "3.14.2"
+random_seed: 0
+
+date_opened: 2026-07-28
+date_decided: 2026-07-28
+decision: fail
+reason: >
+  312 trades, CI [0.17, 0.34] entirely below 1, p=0.0000 - significant loss,
+  same pattern as EXP-0008/EXP-0009.

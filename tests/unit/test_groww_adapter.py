@@ -301,16 +301,18 @@ class FakeGrowwTransport:
 
     def __init__(self) -> None:
         self.place_order_calls: list[dict] = []
+        self.place_order_segments: list[str] = []
         self.cancel_order_calls: list[str] = []
         self.get_order_calls: list[str] = []
-        self.list_positions_calls = 0
+        self.list_positions_calls: list[str] = []
         self.place_order_response: dict = {}
         self.cancel_order_response: dict = {}
         self.get_order_response: dict = {}
-        self.list_positions_response: dict = {"positions": []}
+        self.list_positions_responses: dict[str, dict] = {"CASH": {"positions": []}, "FNO": {"positions": []}}
 
-    def place_order(self, payload: dict) -> dict:
+    def place_order(self, payload: dict, segment: str = "CASH") -> dict:
         self.place_order_calls.append(payload)
+        self.place_order_segments.append(segment)
         return self.place_order_response
 
     def cancel_order(self, order_id: str) -> dict:
@@ -321,9 +323,9 @@ class FakeGrowwTransport:
         self.get_order_calls.append(order_id)
         return self.get_order_response
 
-    def list_positions(self) -> dict:
-        self.list_positions_calls += 1
-        return self.list_positions_response
+    def list_positions(self, segment: str = "CASH") -> dict:
+        self.list_positions_calls.append(segment)
+        return self.list_positions_responses[segment]
 
 
 def make_adapter_with_fake_transport() -> tuple[GrowwBrokerAdapter, FakeGrowwTransport]:
@@ -374,6 +376,25 @@ class GrowwBrokerAdapterTransportWiringTests(unittest.TestCase):
         self.assertEqual(result.status, OrderStatus.PENDING)  # NEW -> PENDING
         self.assertEqual(result.symbol, "RELIANCE")
         self.assertNotIn("order_reference_id", sent_payload)  # unset -> Groww generates its own
+        self.assertEqual(transport.place_order_segments, ["CASH"])
+
+    def test_place_order_resolves_fno_segment_for_nfo_exchange(self) -> None:
+        adapter, transport = make_adapter_with_fake_transport()
+        transport.place_order_response = {"groww_order_id": "GRW-9", "order_status": "NEW"}
+
+        order_request = OrderRequest(
+            symbol="RELIANCE26AUG2600CE",
+            exchange="NFO",
+            side=OrderSide.SELL,
+            quantity=250,
+            order_type=OrderType.LIMIT,
+            product_type=ProductType.INTRADAY,
+            price=15.0,
+        )
+
+        adapter.place_order(order_request)
+
+        self.assertEqual(transport.place_order_segments, ["FNO"])
 
     def test_place_order_forwards_client_order_id_as_order_reference_id(self) -> None:
         adapter, transport = make_adapter_with_fake_transport()
@@ -429,7 +450,7 @@ class GrowwBrokerAdapterTransportWiringTests(unittest.TestCase):
 
     def test_list_positions_calls_transport_and_maps_all_positions(self) -> None:
         adapter, transport = make_adapter_with_fake_transport()
-        transport.list_positions_response = {
+        transport.list_positions_responses["CASH"] = {
             "positions": [
                 {
                     "trading_symbol": "RELIANCE",
@@ -444,10 +465,45 @@ class GrowwBrokerAdapterTransportWiringTests(unittest.TestCase):
 
         result = adapter.list_positions()
 
-        self.assertEqual(transport.list_positions_calls, 1)
+        self.assertEqual(transport.list_positions_calls, ["CASH", "FNO"])
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0].symbol, "RELIANCE")
         self.assertEqual(result[0].product_type, ProductType.INTRADAY)
+
+    def test_list_positions_merges_cash_and_fno_segments(self) -> None:
+        adapter, transport = make_adapter_with_fake_transport()
+        transport.list_positions_responses["CASH"] = {
+            "positions": [
+                {
+                    "trading_symbol": "RELIANCE",
+                    "exchange": "NSE",
+                    "quantity": 10,
+                    "net_price": 2500.0,
+                    "product": "MIS",
+                    "realised_pnl": 0.0,
+                }
+            ]
+        }
+        transport.list_positions_responses["FNO"] = {
+            "positions": [
+                {
+                    "trading_symbol": "RELIANCE26AUG2600CE",
+                    "exchange": "NFO",
+                    "quantity": -250,
+                    "net_price": 15.0,
+                    "product": "NRML",
+                    "realised_pnl": 0.0,
+                }
+            ]
+        }
+
+        result = adapter.list_positions()
+
+        self.assertEqual(len(result), 2)
+        symbols = {p.symbol for p in result}
+        self.assertEqual(symbols, {"RELIANCE", "RELIANCE26AUG2600CE"})
+        fno_position = next(p for p in result if p.symbol == "RELIANCE26AUG2600CE")
+        self.assertEqual(fno_position.quantity, -250)
 
     def test_place_order_raises_on_malformed_transport_response(self) -> None:
         adapter, transport = make_adapter_with_fake_transport()

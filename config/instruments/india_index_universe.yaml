@@ -1,0 +1,25 @@
+universe_name: india_index_v1
+
+# NSE index underlyings for options strategies (see
+# core.strategy.credit_spread.VerticalCreditSpreadStrategy) - deliberately
+# NOT added to india_cash_universe.yaml, which is explicitly scoped to
+# plain cash equities: an index has no lot-sized cash position, isn't
+# selected by the cash-equity bucket-selection pipeline (its spot level
+# would fail that pipeline's affordability filter), and is only ever
+# traded here via its listed NFO options, never bought/sold directly.
+# Selected via CandidateProfile.fixed_universe_segment="INDEX", which
+# bypasses bucket selection entirely rather than running it against a
+# fixed 2-symbol set it was never designed to filter.
+
+instruments:
+  - symbol: NIFTY
+    exchange: NSE
+    segment: INDEX
+    tags: [index_options]
+    enabled: true
+
+  - symbol: BANKNIFTY
+    exchange: NSE
+    segment: INDEX
+    tags: [index_options]
+    enabled: true

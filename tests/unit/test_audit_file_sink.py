@@ -18,6 +18,7 @@ from core.audit.file_sink import FileAuditSink, find_unclean_prior_session
 from core.audit.models import AuditEvent, AuditEventType, SessionMetadata, SessionSummary
 from core.broker.base import Order, OrderSide, OrderStatus, OrderType, ProductType
 from core.broker.groww_errors import GrowwTransportError
+from core.broker.kite_errors import KiteTransportError
 from core.market_data.errors import MarketDataTransportError
 
 
@@ -176,6 +177,15 @@ class FileAuditSinkTests(unittest.TestCase):
         self.sink.record_failure(GrowwTransportError("connection refused"))
 
         events = self._read_events("session-f")
+        event_types = [e["event_type"] for e in events]
+        self.assertIn("broker_error", event_types)
+
+    def test_recording_failure_classifies_kite_errors_as_broker_error(self) -> None:
+        self.sink.start_session(make_metadata("session-f2"))
+
+        self.sink.record_failure(KiteTransportError("connection refused"))
+
+        events = self._read_events("session-f2")
         event_types = [e["event_type"] for e in events]
         self.assertIn("broker_error", event_types)
 

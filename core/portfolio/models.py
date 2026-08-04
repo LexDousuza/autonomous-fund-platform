@@ -28,3 +28,9 @@ class PortfolioAllocationPlan:
     max_symbol_allocation: float
     execution_mode: str = "paper"
     metadata: dict[str, Any] = field(default_factory=dict)
+    # Kill-switch thresholds (see core.risk.session_guardrails.SessionRiskGuardrails)
+    # - siblings of max_daily_loss/max_trades_per_day above, same
+    # None-means-off convention. Optional/trailing so every existing
+    # construction site (tests included) stays valid unchanged.
+    max_consecutive_broker_errors: int | None = None
+    max_consecutive_order_rejections: int | None = None

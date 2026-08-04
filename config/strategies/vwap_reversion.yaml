@@ -1,0 +1,12 @@
+strategy:
+  name: vwap_reversion
+
+params:
+  min_bars_for_vwap: 6
+  min_deviation_pct: 0.4
+  allow_multiple_entries: false
+
+# No candidate_profile here deliberately: mean reversion doesn't need
+# "unusually active" or "in an uptrend" filtering the way the
+# continuation strategies do - it's looking for the opposite condition
+# (an extended move), which those screens would work against, not with.

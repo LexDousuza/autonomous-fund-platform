@@ -19,6 +19,14 @@ Two rules, always applied together:
   deterministic proxy for how much a symbol moves - the mean daily
   high/low range as a fraction of close, over the supplied price history.
   Tighter for a more conservative appetite; unconstrained for aggressive.
+  When a candidate has an options-implied volatility available
+  (``iv_by_symbol``, an annualized figure from an option chain's
+  at-the-money IV - see ``core/pricing/iv_resolver.py``), that
+  forward-looking figure is used *instead of* the trailing daily-range
+  proxy for that symbol, converted to the same daily scale via
+  ``iv_annualized / sqrt(252)`` so it's checked against the same
+  ceiling table - one mental model, not a second independently-tuned
+  IV ceiling.
 
 Deliberately a pure function of ``(instruments, price_history, criteria)``
 - it does not care whether ``price_history`` came from real historical
@@ -29,6 +37,7 @@ same selection logic is exercised (and testable) regardless of which
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 from core.market_data.universe_models import Instrument
@@ -40,6 +49,8 @@ RISK_APPETITE_VOLATILITY_CEILINGS: dict[str, float | None] = {
     "aggressive": None,  # no volatility ceiling
 }
 
+_TRADING_DAYS_PER_YEAR_SQRT = math.sqrt(252)
+
 
 @dataclass(slots=True)
 class BucketSelectionCriteria:
@@ -50,27 +61,57 @@ class BucketSelectionCriteria:
     kept as plain fields here (rather than depending on those types
     directly) so this module only takes exactly what it needs.
     ``max_bucket_size`` is optional: ``None`` means no cap beyond
-    whatever affordability/volatility already excluded.
+    whatever affordability/volatility already excluded. When it does
+    cap and ``rank_by_volatility`` is ``True``, the kept subset is the
+    ``max_bucket_size`` *highest-volatility* survivors (still under the
+    risk-appetite ceiling) rather than the first ``max_bucket_size`` in
+    source-universe order - see ``core.market_data.candidate_profile.
+    CandidateProfile.rank_by_volatility``.
     """
 
     risk_appetite: str
     max_capital_per_trade: float
     max_bucket_size: int | None = None
+    rank_by_volatility: bool = False
 
 
 @dataclass(slots=True)
 class BucketExclusion:
-    """One candidate that did not make it into the bucket, and why."""
+    """
+    One candidate that did not make it into the bucket, and why.
+
+    ``last_close``/``volatility_pct``/``volatility_ceiling`` are the
+    actual numbers the decision was made from, when computed for this
+    candidate before it was excluded - ``None`` for reasons decided
+    before those numbers exist yet (``no_price_history``, since there's
+    no ``last_close`` to read at all).
+    """
 
     symbol: str
     exchange: str
     reason: str
+    last_close: float | None = None
+    volatility_pct: float | None = None
+    volatility_ceiling: float | None = None
+
+
+@dataclass(slots=True)
+class BucketSelectionDetail:
+    """Why a selected instrument passed both checks - the same numbers ``BucketExclusion`` carries for a rejection."""
+
+    symbol: str
+    exchange: str
+    last_close: float
+    volatility_pct: float | None
+    volatility_ceiling: float | None
+    volatility_source: str  # "implied" (options IV) or "historical" (trailing daily range)
 
 
 @dataclass(slots=True)
 class BucketSelectionResult:
     selected: list[Instrument] = field(default_factory=list)
     excluded: list[BucketExclusion] = field(default_factory=list)
+    selection_detail: list[BucketSelectionDetail] = field(default_factory=list)
 
 
 def _average_daily_range_pct(bars: list[MarketBar]) -> float | None:
@@ -93,6 +134,7 @@ class CapitalRiskBucketSelector:
         instruments: list[Instrument],
         price_history: dict[str, list[MarketBar]],
         criteria: BucketSelectionCriteria,
+        iv_by_symbol: dict[str, float] | None = None,
     ) -> BucketSelectionResult:
         if criteria.risk_appetite not in RISK_APPETITE_VOLATILITY_CEILINGS:
             raise ValueError(
@@ -123,6 +165,7 @@ class CapitalRiskBucketSelector:
                         symbol=instrument.symbol,
                         exchange=instrument.exchange,
                         reason="invalid_price",
+                        last_close=last_close,
                     )
                 )
                 continue
@@ -133,35 +176,69 @@ class CapitalRiskBucketSelector:
                         symbol=instrument.symbol,
                         exchange=instrument.exchange,
                         reason="unaffordable_at_current_capital",
+                        last_close=last_close,
                     )
                 )
                 continue
 
-            avg_range_pct = _average_daily_range_pct(bars)
+            annualized_iv = (iv_by_symbol or {}).get(instrument.symbol)
+            volatility_source = "implied" if annualized_iv is not None else "historical"
+            volatility_pct = (
+                annualized_iv / _TRADING_DAYS_PER_YEAR_SQRT
+                if annualized_iv is not None
+                else _average_daily_range_pct(bars)
+            )
             if (
                 volatility_ceiling is not None
-                and avg_range_pct is not None
-                and avg_range_pct > volatility_ceiling
+                and volatility_pct is not None
+                and volatility_pct > volatility_ceiling
             ):
                 result.excluded.append(
                     BucketExclusion(
                         symbol=instrument.symbol,
                         exchange=instrument.exchange,
                         reason="volatility_exceeds_risk_appetite",
+                        last_close=last_close,
+                        volatility_pct=volatility_pct,
+                        volatility_ceiling=volatility_ceiling,
                     )
                 )
                 continue
 
             result.selected.append(instrument)
+            result.selection_detail.append(
+                BucketSelectionDetail(
+                    symbol=instrument.symbol,
+                    exchange=instrument.exchange,
+                    last_close=last_close,
+                    volatility_pct=volatility_pct,
+                    volatility_ceiling=volatility_ceiling,
+                    volatility_source=volatility_source,
+                )
+            )
+
+        if criteria.rank_by_volatility and len(result.selected) > 1:
+            ranked = sorted(
+                zip(result.selected, result.selection_detail),
+                key=lambda pair: pair[1].volatility_pct if pair[1].volatility_pct is not None else -1.0,
+                reverse=True,
+            )
+            result.selected = [instrument for instrument, _detail in ranked]
+            result.selection_detail = [detail for _instrument, detail in ranked]
 
         if criteria.max_bucket_size is not None and len(result.selected) > criteria.max_bucket_size:
             overflow = result.selected[criteria.max_bucket_size :]
+            overflow_detail = {d.symbol: d for d in result.selection_detail[criteria.max_bucket_size :]}
             result.selected = result.selected[: criteria.max_bucket_size]
+            result.selection_detail = result.selection_detail[: criteria.max_bucket_size]
             result.excluded.extend(
                 BucketExclusion(
                     symbol=instrument.symbol,
                     exchange=instrument.exchange,
                     reason="bucket_size_cap",
+                    last_close=overflow_detail[instrument.symbol].last_close,
+                    volatility_pct=overflow_detail[instrument.symbol].volatility_pct,
+                    volatility_ceiling=overflow_detail[instrument.symbol].volatility_ceiling,
                 )
                 for instrument in overflow
             )
@@ -173,6 +250,7 @@ def select_bucket(
     instruments: list[Instrument],
     price_history: dict[str, list[MarketBar]],
     criteria: BucketSelectionCriteria,
+    iv_by_symbol: dict[str, float] | None = None,
 ) -> BucketSelectionResult:
     """Convenience wrapper around ``CapitalRiskBucketSelector().select(...)``."""
-    return CapitalRiskBucketSelector().select(instruments, price_history, criteria)
+    return CapitalRiskBucketSelector().select(instruments, price_history, criteria, iv_by_symbol)

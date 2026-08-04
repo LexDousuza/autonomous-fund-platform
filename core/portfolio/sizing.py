@@ -14,6 +14,10 @@ class PositionSizingEngine:
     budget for a single trade, and the order quantity is however many
     whole shares that budget affords at the current price. Broker- and
     strategy-independent: it only looks at price and the allocation plan.
+
+    ``request.lot_size`` (default ``1``, byte-identical for every
+    existing cash-equity call site) rounds the quantity down to a whole
+    number of lots: ``floor(budget / (price * lot_size)) * lot_size``.
     """
 
     def size(self, request: PositionSizingRequest) -> PositionSizingDecision:
@@ -38,7 +42,8 @@ class PositionSizingEngine:
                 metadata={"max_capital_per_trade": capital_budget},
             )
 
-        max_affordable_quantity = math.floor(capital_budget / request.price)
+        lots_affordable = math.floor(capital_budget / (request.price * request.lot_size))
+        max_affordable_quantity = lots_affordable * request.lot_size
 
         if max_affordable_quantity < 1:
             return PositionSizingDecision(
@@ -46,7 +51,11 @@ class PositionSizingEngine:
                 capital_used=0.0,
                 max_affordable_quantity=0,
                 reason="price_exceeds_capital_per_trade",
-                metadata={"price": request.price, "max_capital_per_trade": capital_budget},
+                metadata={
+                    "price": request.price,
+                    "max_capital_per_trade": capital_budget,
+                    "lot_size": request.lot_size,
+                },
             )
 
         approved_quantity = max_affordable_quantity

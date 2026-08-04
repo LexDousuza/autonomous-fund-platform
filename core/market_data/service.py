@@ -49,8 +49,8 @@ class MarketDataService:
     def available_feeds(self) -> list[str]:
         return sorted(self._feeds.keys())
 
-    def subscribe(self, symbol: str) -> None:
-        self.active_feed.subscribe(symbol)
+    def subscribe(self, symbol: str, exchange: str | None = None) -> None:
+        self.active_feed.subscribe(symbol, exchange=exchange)
 
     def unsubscribe(self, symbol: str) -> None:
         self.active_feed.unsubscribe(symbol)

@@ -15,12 +15,18 @@ means adding a branch here. Mirrors ``core/broker/factory.py``'s shape.
 from __future__ import annotations
 
 from datetime import date
+from typing import Any
 
 from core.market_data.angelone_historical_feed import (
     AngelOneHistoricalFeedSettings,
     AngelOneHistoricalInstrument,
     AngelOneHistoricalMarketDataFeed,
 )
+from core.market_data.angelone_intraday_feed import (
+    AngelOneIntradayFeedSettings,
+    AngelOneIntradayLiveMarketDataFeed,
+)
+from core.market_data.angelone_live_feed import AngelOneLiveFeedSettings, AngelOneLiveMarketDataFeed
 from core.market_data.angelone_transport import (
     AngelOneMarketDataCredentials,
     AngelOneMarketDataTransport,
@@ -54,7 +60,7 @@ from core.market_data.kite_transport import (
 from core.market_data.memory_feed import MemoryMarketDataFeed
 
 _SUPPORTED_PROVIDERS = {"memory", "csv", "groww", "kite", "angelone"}
-_SUPPORTED_MODES = {"paper", "live", "historical"}
+_SUPPORTED_MODES = {"paper", "live", "live_candles", "historical"}
 
 _DEFAULT_POLL_INTERVAL_SECONDS = 5.0
 _DEFAULT_MAX_POLLS = 1  # bounded: safe for a one-shot app invocation; override for a long-running service
@@ -63,6 +69,9 @@ _DEFAULT_EXCHANGE = "NSE"
 _DEFAULT_HISTORICAL_INTERVAL = "1day"  # real growwapi CANDLE_INTERVAL_DAY value
 _DEFAULT_KITE_HISTORICAL_INTERVAL = "day"  # real kiteconnect candle-interval value
 _DEFAULT_ANGELONE_HISTORICAL_INTERVAL = "ONE_DAY"  # real SmartAPI interval value
+# Mirrors angelone_historical_feed._DEFAULT_PACING_SECONDS - see that
+# module's docstring for the verified 3 req/sec getCandleData rate limit.
+_DEFAULT_ANGELONE_HISTORICAL_PACING_SECONDS = 0.4
 
 
 def build_market_data_feed(config: MarketDataConfig) -> MarketDataFeed:
@@ -81,10 +90,18 @@ def build_market_data_feed(config: MarketDataConfig) -> MarketDataFeed:
       (batch-fetched, see ``groww_historical_feed.py``). ``mode="paper"``
       raises: see ``MarketDataConfig``'s docstring for why.
     - ``provider="angelone"``, ``mode="historical"`` -> ``AngelOneHistoricalMarketDataFeed``
-      (batch-fetched, see ``angelone_historical_feed.py``). ``mode="live"``/
-      ``mode="paper"`` both raise - Angel One is deliberately scoped to
-      historical data only in this platform; Kite is the only live/paper
-      trading broker/market-data provider.
+      (batch-fetched, see ``angelone_historical_feed.py``).
+    - ``provider="angelone"``, ``mode="live"`` -> ``AngelOneLiveMarketDataFeed``
+      (LTP-polling, see ``angelone_live_feed.py`` - no volume/real
+      trade-timestamp, unlike Groww/Kite's quote payloads).
+    - ``provider="angelone"``, ``mode="live_candles"`` -> ``AngelOneIntradayLiveMarketDataFeed``
+      (real 1-minute OHLCV via ``getCandleData``, see
+      ``angelone_intraday_feed.py`` - real volume, unlike ``mode="live"``).
+      ``mode="paper"`` raises: Angel One has no separate paper/sandbox
+      market-data mode, same as Groww/Kite. Angel One is still never a
+      *broker* - only "paper"-broker sessions may use it as
+      market_data_provider (see ``apps/live_trader/config.py``'s
+      ``_ALLOWED_PROVIDER_COMBINATIONS``).
 
     Raises ``ValueError`` for an unknown ``mode``, an unknown
     ``provider``, a provider/mode combination that doesn't make sense, or
@@ -128,12 +145,16 @@ def build_market_data_feed(config: MarketDataConfig) -> MarketDataFeed:
         )
 
     if provider == "angelone":
+        if mode == "live":
+            return _build_angelone_live_feed(config)
+        if mode == "live_candles":
+            return _build_angelone_intraday_feed(config)
         if mode == "historical":
             return _build_angelone_historical_feed(config)
         raise ValueError(
             "Invalid market data config: provider='angelone' only supports "
-            f"mode='historical' (got mode='{config.mode}') - Angel One is "
-            "deliberately scoped to historical data only in this platform; "
+            f"mode='live', mode='live_candles', or mode='historical' (got mode='{config.mode}') - "
+            "Angel One has no separate paper/sandbox market-data mode, same as Groww/Kite; "
             "Kite is the only live/paper trading broker/market-data provider. "
             "See core/market_data/angelone_transport.py's module docstring."
         )
@@ -286,6 +307,69 @@ def _build_kite_historical_feed(config: MarketDataConfig) -> KiteHistoricalMarke
     return KiteHistoricalMarketDataFeed(transport=transport, instruments=instruments, settings=settings)
 
 
+def _build_angelone_live_feed(config: MarketDataConfig) -> AngelOneLiveMarketDataFeed:
+    api_key = config.metadata.get("api_key")
+    client_code = config.metadata.get("client_code")
+    password = config.metadata.get("password")
+    totp_secret = config.metadata.get("totp_secret")
+
+    if not api_key or not client_code or not password or not totp_secret:
+        raise ValueError(
+            "Angel One market data config requires 'api_key', 'client_code', "
+            "'password', and 'totp_secret' in metadata."
+        )
+
+    credentials = AngelOneMarketDataCredentials(
+        api_key=api_key, client_code=client_code, password=password, totp_secret=totp_secret
+    )
+    timeout_seconds = config.metadata.get("timeout_seconds", _DEFAULT_TIMEOUT_SECONDS)
+    exchange = config.metadata.get("exchange", _DEFAULT_EXCHANGE)
+    poll_interval_seconds = config.metadata.get(
+        "poll_interval_seconds", _DEFAULT_POLL_INTERVAL_SECONDS
+    )
+    max_polls = config.metadata.get("max_polls", _DEFAULT_MAX_POLLS)
+
+    transport = AngelOneMarketDataTransport(
+        AngelOneMarketDataTransportConfig(credentials=credentials, timeout_seconds=timeout_seconds)
+    )
+    settings = AngelOneLiveFeedSettings(poll_interval_seconds=poll_interval_seconds, max_polls=max_polls)
+
+    return AngelOneLiveMarketDataFeed(transport=transport, exchange=exchange, settings=settings)
+
+
+def _build_angelone_intraday_feed(config: MarketDataConfig) -> AngelOneIntradayLiveMarketDataFeed:
+    api_key = config.metadata.get("api_key")
+    client_code = config.metadata.get("client_code")
+    password = config.metadata.get("password")
+    totp_secret = config.metadata.get("totp_secret")
+
+    if not api_key or not client_code or not password or not totp_secret:
+        raise ValueError(
+            "Angel One market data config requires 'api_key', 'client_code', "
+            "'password', and 'totp_secret' in metadata."
+        )
+
+    credentials = AngelOneMarketDataCredentials(
+        api_key=api_key, client_code=client_code, password=password, totp_secret=totp_secret
+    )
+    timeout_seconds = config.metadata.get("timeout_seconds", _DEFAULT_TIMEOUT_SECONDS)
+    exchange = config.metadata.get("exchange", _DEFAULT_EXCHANGE)
+    poll_interval_seconds = config.metadata.get("poll_interval_seconds")
+    max_polls = config.metadata.get("max_polls")
+
+    transport = AngelOneMarketDataTransport(
+        AngelOneMarketDataTransportConfig(credentials=credentials, timeout_seconds=timeout_seconds)
+    )
+    settings_kwargs: dict[str, Any] = {}
+    if poll_interval_seconds is not None:
+        settings_kwargs["poll_interval_seconds"] = poll_interval_seconds
+    if max_polls is not None:
+        settings_kwargs["max_polls"] = max_polls
+    settings = AngelOneIntradayFeedSettings(**settings_kwargs)
+
+    return AngelOneIntradayLiveMarketDataFeed(transport=transport, exchange=exchange, settings=settings)
+
+
 def _build_angelone_historical_feed(config: MarketDataConfig) -> AngelOneHistoricalMarketDataFeed:
     api_key = config.metadata.get("api_key")
     client_code = config.metadata.get("client_code")
@@ -333,7 +417,8 @@ def _build_angelone_historical_feed(config: MarketDataConfig) -> AngelOneHistori
         to_date=date.fromisoformat(to_date_raw),
         interval=interval,
     )
+    pacing_seconds = config.metadata.get("pacing_seconds", _DEFAULT_ANGELONE_HISTORICAL_PACING_SECONDS)
 
     return AngelOneHistoricalMarketDataFeed(
-        transport=transport, instruments=instruments, settings=settings
+        transport=transport, instruments=instruments, settings=settings, pacing_seconds=pacing_seconds
     )

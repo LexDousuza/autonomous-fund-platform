@@ -1,0 +1,43 @@
+id: EXP-0011
+hypothesis: >
+  Pullback entries filtered to symbols showing unusually high recent
+  relative volume outperform plain pullback (EXP-0010).
+economic_mechanism: >
+  Combines the "Stocks in Play" effect (real academic finding: abnormal
+  same-day volume relative to a symbol's own baseline attracts genuine
+  informed/institutional flow, per Zarattini/Barbon/Aziz) with
+  `pullback`'s trend-resumption entry - betting that filtering to symbols
+  showing real above-baseline participation (not just any uptrend) picks
+  out pullbacks with a genuine catalyst behind them, not noise. No
+  dedicated spec doc exists; mechanism reconstructed from
+  `core/strategy/relative_volume_pullback.py`'s own docstring and this
+  project's own prior research memory on the hybrid-strategy attempt.
+
+dataset: data/processed/nse_5min_dev.csv
+period: {train_or_dev: "nse_5min_dev.csv, 123 trading days", holdout: "nse_5min_holdout.csv exists and is the established pair for this strategy specifically - not run here, this entry is the same in-sample-only significance check as every other EXP this batch; validate_hybrid_holdout.py already carries this strategy's actual holdout result separately"}
+parameters: {trend_lookback_bars: 20, pullback_lookback_bars: 5, min_pullback_pct: 0.3, volume_lookback_bars: 10, min_volume_multiplier: 1.3}
+
+bootstrap_ci: {point_estimate: 0.22044257502682832, lower: 0.05958722656764071, upper: 0.5236374112778607, n_resamples: 2000}
+p_value: 0.0005
+fdr_corrected: true   # significant, but CI is below 1 (a confirmed loss, not a confirmed edge) - see reason below
+kill_criteria_result: {ci_lower_bound_above_1: false, fdr_p_under_threshold: true, holdout_drop_under_25pct: null, walk_forward_sign_consistent: null}
+
+git_commit: b32f494a980aa65e74b7e5753caa8dae3237e725
+config_version: config/strategies/relative_volume_pullback.yaml
+data_snapshot_id: sha256:a172d0e259f144091bda8b63db988e755a97fb2245c7a9cb9a73dce1825f8177
+python_version: "3.14.2"
+random_seed: 0
+
+date_opened: 2026-07-28
+date_decided: 2026-07-28
+decision: fail
+reason: >
+  82 trades, CI [0.06, 0.52] entirely below 1, p=0.0005 - significant loss
+  on THIS significance check (bootstrap/permutation on the dev-period
+  sample). Narrower filter than plain pullback (82 vs 312 trades) improved
+  the point estimate (0.22 vs 0.24) only marginally and the strategy is
+  still a confirmed loser on this basis. This is a different question from
+  validate_hybrid_holdout.py's own dev-vs-holdout result for the same
+  strategy - reconcile the two before treating either as final; that script
+  used a tuned parameter set (BEST_PARAMS/BEST_PROFILE), not this config
+  file's defaults.

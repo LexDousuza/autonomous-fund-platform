@@ -1,0 +1,49 @@
+id: EXP-0013
+hypothesis: Statistically-fit OU mean-reversion (5-min bars) predicts reversion to a rolling equilibrium.
+economic_mechanism: >
+  A stock's own log-price is hypothesized to revert toward a rolling
+  equilibrium (mu) at a fitted rate (theta) - noise traders push price away
+  from fair value, arbitrageurs pull it back. Only fires when the fit clears
+  a high significance bar (min_t_stat=3.5, not the usual ~2) because a naive
+  theta>0 check is known to spuriously detect "reversion" in a pure random
+  walk in ~29% of simulated cases (the same finite-sample bias the
+  Augmented Dickey-Fuller test exists to correct for) - see
+  docs/strategy-specs/ornstein_uhlenbeck.md for the full model.
+
+dataset: data/processed/nse_5min_dev.csv
+period: {train_or_dev: "nse_5min_dev.csv, 123 trading days", holdout: null}
+parameters: {lookback_bars: 60, entry_z_threshold: 2.0, min_t_stat: 3.5, min_half_life_minutes: 15.0, max_half_life_minutes: 75.0, min_remaining_half_lives: 2.0}
+
+bootstrap_ci: {point_estimate: 0.0, lower: null, upper: null, n_resamples: 0}
+p_value: 1.0
+fdr_corrected: false
+kill_criteria_result: {ci_lower_bound_above_1: false, fdr_p_under_threshold: false, holdout_drop_under_25pct: null, walk_forward_sign_consistent: null}
+
+git_commit: b32f494a980aa65e74b7e5753caa8dae3237e725
+config_version: config/strategies/ornstein_uhlenbeck_5min.yaml
+data_snapshot_id: sha256:a172d0e259f144091bda8b63db988e755a97fb2245c7a9cb9a73dce1825f8177
+python_version: "3.14.2"
+random_seed: 0
+
+date_opened: 2026-07-28
+date_decided: 2026-08-05
+decision: archived
+reason: >
+  RE-AUDITED after the risk-manager fix (core.risk.simple_intraday now
+  supports a per-strategy min_profit_to_brokerage_ratio override; this
+  family gets 1.3 instead of the global 2.0 - see
+  docs/research/ou_gbm_risk_manager_fix_reaudit.md). This CORRECTS the
+  earlier "no_signals_generated" story (already superseded once, see git
+  history) and now supersedes the interim "blocked by a calibration bug"
+  finding too: the fix landed, the previously-rejected signal now clears
+  the brokerage check and is approved and filled - but a REAL statistical
+  verdict was possible for the first time, and it's negative. Over the
+  full nse_5min_dev.csv window (123 days), the fix unblocks exactly 1
+  trade, which lost money (profit_factor point estimate 0.0). n=1 is too
+  few for a bootstrap CI (undefined) or a meaningful permutation test
+  (p=1.0, uninformative). Verdict: NOT a validated edge, and not enough
+  data to call it a confirmed loser either - the strategy's own
+  min_t_stat=3.5 entry gate is simply this strict against this dataset,
+  independent of the risk-manager bug now fixed. Archived: the risk-
+  manager blocker is gone, but this exact config/dataset combination has
+  nothing left to learn from without materially more history.

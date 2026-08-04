@@ -1,0 +1,61 @@
+id: FEAT-0005
+feature: iv_rv_ratio
+hypothesis: >
+  NIFTY's own ATM-IV/trailing-realized-vol ratio predicts NIFTY's forward
+  5-day INDEX return (a distinct question from VRP/EXP-0001, which tests
+  IV against subsequent - not trailing - realized vol, and doesn't test
+  return direction at all).
+economic_mechanism: >
+  Elevated IV relative to recent realized vol reflects an options-implied
+  risk/fear premium; if that premium tends to mean-revert (fear unwinds),
+  the index should see positive subsequent returns following episodes of
+  IV richness.
+question_2_redundancy_check: >
+  Distinct from EXP-0001 (VRP): that tests IV vs. FORWARD realized vol as
+  a magnitude spread (the options-seller's edge); this tests IV vs.
+  TRAILING realized vol as a predictor of the index's own RETURN
+  direction - different target variable, different economic claim,
+  despite sharing an "IV/RV" name.
+
+methodology: index-only time-series correlation (no per-stock options data in this pipeline - see docs/research/features/README.md)
+dataset: data/processed/nse_index_options_iv_history.csv
+period: 2016-01-01 to 2026-07-24
+parameters: {iv_horizon_days: 7, iv_tolerance_days: 3, realized_vol_lookback_days: 20, forward_horizon_days: 5}
+
+bootstrap_ci:
+  point_estimate: 0.08306547066511434
+  lower: 0.04739203924154827
+  upper: 0.11990675012788246
+  n_resamples: 2000
+p_value: 0.0
+fdr_corrected: true   # Benjamini-Hochberg across all 8 Phase A features, fdr=0.05
+n_observations: 1994
+
+git_commit: b32f494a980aa65e74b7e5753caa8dae3237e725
+data_snapshot_id: sha256:e5781844a58c6f81b1d594ca5d695a2f94ee8c79a373fc80a8c1dacd9badba6b
+python_version: "3.14.2"
+random_seed: 0
+
+date_opened: 2026-07-29
+date_decided: 2026-07-30
+decision: fail
+reason: >
+  UPDATED 2026-07-30 (Phase 2 robustness -
+  docs/research/validation_audit_phase2_features.md). Phase A's
+  full-sample result (p=0.0000, CI [0.047, 0.120], n=1994) does NOT hold
+  up out-of-sample: DEV (2016-2023) is strong (IC=+0.078, p=0.003) but
+  HOLDOUT (2024-2026) fails decisively (IC=+0.014, p=0.713, CI
+  [-0.056, +0.084]). Walk-forward: only 1 of 8 individual years
+  (2018) reaches significance on its own; the other 7 don't, with signs
+  and magnitudes bouncing around inconsistently. Parameter sensitivity is
+  genuinely excellent - robust across realized_vol_lookback_days
+  (10/15/20/30/40) and forward_horizon_days (3/5/7/10), every single
+  value tried survives - so this isn't a fragile, cherry-picked
+  definition. The problem is temporal: the full-sample Phase A "pass" was
+  the strong 2016-2023 period dominating a pooled test; the relationship
+  doesn't clearly persist into the most recent ~2.5 years. Downgraded
+  from pass to fail. Distinct from EXP-0001 (VRP), which DID pass this
+  same holdout window when tested directly (IC vs. subsequent realized
+  vol, not this feature's IC vs. return direction) - don't let this
+  result cast doubt on VRP itself, they're different claims on the same
+  data.

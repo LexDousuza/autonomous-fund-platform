@@ -98,7 +98,8 @@ class GrowwHistoricalMarketDataFeed(MarketDataFeed):
         self._latest: dict[str, MarketBar] = {}
         self._bars: list[MarketBar] = self._fetch_all(instruments)
 
-    def subscribe(self, symbol: str) -> None:
+    def subscribe(self, symbol: str, exchange: str | None = None) -> None:
+        # exchange unused: this feed's bars already carry their own exchange field.
         self._subscribed.add(symbol)
 
     def unsubscribe(self, symbol: str) -> None:

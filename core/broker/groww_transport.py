@@ -39,10 +39,15 @@ from core.broker.groww_models import GrowwCredentials
 from core.utils.resilience import CircuitBreaker, CircuitOpenError, RetryPolicy, retry_with_backoff
 from core.utils.totp import generate_totp
 
-# This platform only trades NSE/BSE cash equities in V1 (see CLAUDE.md) -
-# every call is scoped to the CASH segment so F&O/commodity positions a
-# Groww account might also hold never leak into this platform's view.
-_SEGMENT = GrowwAPI.SEGMENT_CASH
+# Every call defaults to the CASH segment (this platform's only kind
+# until the options work) unless the caller passes ``segment=`` - every
+# existing call site is unaffected. ``get_order``/``cancel_order`` are
+# not segment-aware even so: they take only an order id (matching
+# ``Broker.get_order``/``cancel_order``'s signature), and nothing in V1
+# yet needs to cancel/fetch an NFO order by id (naked writes are held to
+# square-off, never cancelled - see ``core/strategy/options_mispricing.py``).
+_SEGMENT_CASH = GrowwAPI.SEGMENT_CASH
+_SEGMENT_FNO = GrowwAPI.SEGMENT_FNO
 
 _RETRY_POLICY = RetryPolicy()
 
@@ -147,29 +152,30 @@ class GrowwHttpTransport:
 
     # -- public operations ---------------------------------------------------
 
-    def place_order(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def place_order(self, payload: dict[str, Any], segment: str = _SEGMENT_CASH) -> dict[str, Any]:
         """Place a new order. ``payload`` keys match ``GrowwAPI.place_order``'s kwargs."""
         return self._call(
             "place_order",
             lambda: self._client.place_order(
-                segment=_SEGMENT, timeout=self._config.timeout_seconds, **payload
+                segment=segment, timeout=self._config.timeout_seconds, **payload
             ),
             retryable=False,
         )
 
     def cancel_order(self, order_id: str) -> dict[str, Any]:
-        """Cancel an existing order by id."""
+        """Cancel an existing order by id (CASH segment only - see module docstring)."""
         return self._call(
             "cancel_order",
             lambda: self._client.cancel_order(
-                groww_order_id=order_id, segment=_SEGMENT, timeout=self._config.timeout_seconds
+                groww_order_id=order_id, segment=_SEGMENT_CASH, timeout=self._config.timeout_seconds
             ),
             retryable=False,
         )
 
     def get_order(self, order_id: str) -> dict[str, Any]:
         """
-        Fetch full current state of an order by id.
+        Fetch full current state of an order by id (CASH segment only -
+        see module docstring).
 
         Deliberately calls ``get_order_detail`` rather than
         ``get_order_status``: the latter's verified response only
@@ -181,17 +187,47 @@ class GrowwHttpTransport:
         return self._call(
             "get_order",
             lambda: self._client.get_order_detail(
-                groww_order_id=order_id, segment=_SEGMENT, timeout=self._config.timeout_seconds
+                groww_order_id=order_id, segment=_SEGMENT_CASH, timeout=self._config.timeout_seconds
             ),
             retryable=True,
         )
 
-    def list_positions(self) -> dict[str, Any]:
-        """Fetch all current cash-segment positions. Verified shape: ``{"positions": [...]}``."""
+    def list_positions(self, segment: str = _SEGMENT_CASH) -> dict[str, Any]:
+        """Fetch all current positions for ``segment``. Verified shape: ``{"positions": [...]}``."""
         return self._call(
             "list_positions",
             lambda: self._client.get_positions_for_user(
-                segment=_SEGMENT, timeout=self._config.timeout_seconds
+                segment=segment, timeout=self._config.timeout_seconds
             ),
+            retryable=True,
+        )
+
+    def get_order_margin_details(self, orders: list[dict[str, Any]], segment: str = _SEGMENT_FNO) -> dict[str, Any]:
+        """
+        Batch order-margin calculator. Each ``orders`` item needs
+        ``trading_symbol``/``transaction_type``/``quantity``/``price``/
+        ``order_type``/``product``/``exchange`` (verified against the
+        installed SDK's own request-building source). Response is one
+        aggregate margin breakdown for the whole batch, keyed
+        (verified: https://groww.in/trade-api/docs/python-sdk/margin)
+        by ``total_requirement`` among other fields - not per-order.
+        """
+        return self._call(
+            "get_order_margin_details",
+            lambda: self._client.get_order_margin_details(
+                segment=segment, orders=orders, timeout=self._config.timeout_seconds
+            ),
+            retryable=True,
+        )
+
+    def get_available_margin_details(self) -> dict[str, Any]:
+        """
+        Fetch the user's available margin/balance details. Verified
+        shape (same docs page) includes ``clear_cash`` - the primary
+        available-funds figure.
+        """
+        return self._call(
+            "get_available_margin_details",
+            lambda: self._client.get_available_margin_details(timeout=self._config.timeout_seconds),
             retryable=True,
         )

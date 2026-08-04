@@ -1,0 +1,53 @@
+id: FEAT-0004
+feature: atr_pct
+hypothesis: >
+  Elevated trading range (ATR as % of price) predicts forward 5-day
+  return.
+economic_mechanism: >
+  A range measure sensitive to gaps and intrabar excursions, distinct
+  from realized volatility's symmetric dispersion - tests whether the
+  trading-range channel specifically (as opposed to close-to-close
+  variance) carries predictive information, e.g. via a
+  volatility/liquidity risk premium or mean-reversion channel.
+question_2_redundancy_check: >
+  Distinct from realized volatility (not yet tested as its own feature
+  this batch) - ATR captures range/gap risk, realized vol captures
+  close-to-close dispersion; the two can diverge on gappy vs. smoothly
+  trending names.
+
+methodology: cross-sectional daily IC, 122-symbol universe (real NSE corporate-actions table applied - see FEAT-0001)
+dataset: data/processed/nse_daily_12mo.csv
+period: 2025-07 to 2026-07 (~12 months)
+parameters: {lookback_days: 14, forward_horizon_days: 5}
+
+bootstrap_ci:
+  point_estimate: 0.014822138307740216
+  lower: -0.00418407399213241
+  upper: 0.034374287754994584
+  n_resamples: 2000
+p_value: 0.2185
+fdr_corrected: false
+n_observations: 227
+
+git_commit: b32f494a980aa65e74b7e5753caa8dae3237e725
+data_snapshot_id: null
+python_version: "3.14.2"
+random_seed: 0
+
+date_opened: 2026-07-29
+date_decided: 2026-07-30
+decision: fail
+reason: >
+  The one feature whose story changed twice, in opposite directions -
+  worth reading carefully rather than trusting either intermediate
+  state. (1) 25 symbols, unadjusted: IC=0.023, p=0.181. (2) 126 symbols,
+  SKFINDIA excluded by a crude >30%-jump heuristic (4 other real
+  problem symbols - ADANIENT, HINDUNILVR, TVSMOTOR, VEDL - still
+  present and unadjusted): IC=0.020, CI cleared zero, p=0.0975 -
+  looked like the strongest "moving toward significance" story in the
+  batch. (3) 122 symbols, real corporate-actions table (those 4 extra
+  symbols now correctly excluded, 6 others properly price-adjusted):
+  IC=0.015, CI back to straddling zero, p=0.2185 - the apparent
+  strengthening in (2) was itself partly a data-contamination artifact,
+  not a real effect getting clearer with more data. Final read: not
+  significant, no longer the batch's most promising near-miss.

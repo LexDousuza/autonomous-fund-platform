@@ -155,6 +155,19 @@ class KiteMarketDataTransport:
             raise UnsupportedSymbolError(f"Kite market data does not recognize symbol '{key}'")
         return data[key]
 
+    def get_quotes(self, symbols_with_exchange: list[tuple[str, str]]) -> dict[str, dict[str, Any]]:
+        """
+        Batch-fetch quotes for multiple ``(symbol, exchange)`` pairs in
+        one call - Kite's ``quote()`` accepts several
+        ``exchange:tradingsymbol`` keys at once, so scanning an option
+        chain's contracts is one API call instead of one per contract.
+        Keyed by ``"EXCHANGE:TRADINGSYMBOL"``; per Kite's docs, a key
+        with no data (e.g. an expired/delisted contract) is simply
+        absent from the response rather than an error.
+        """
+        keys = [f"{exchange}:{symbol}" for symbol, exchange in symbols_with_exchange]
+        return self._call("get_quotes", lambda: self._client.quote(*keys))
+
     def get_historical_candles(
         self,
         symbol: str,

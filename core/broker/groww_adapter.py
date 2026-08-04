@@ -49,6 +49,19 @@ from core.broker.groww_transport import GrowwHttpTransport, GrowwTransportConfig
 # see https://groww.in/trade-api/docs/python-sdk/annexures).
 _VALIDITY_DAY = "DAY"
 
+# Groww's two real segment codes (GrowwAPI.SEGMENT_CASH/SEGMENT_FNO) -
+# spelled out here rather than importing the SDK, matching this file's
+# existing convention of literal wire-vocabulary strings (see
+# _PRODUCT_TYPE_TO_GROWW below). An order/position is FNO exactly when
+# its exchange is "NFO"; every existing NSE/BSE cash call site is
+# unaffected.
+_SEGMENT_CASH = "CASH"
+_SEGMENT_FNO = "FNO"
+
+
+def _segment_for_exchange(exchange: str) -> str:
+    return _SEGMENT_FNO if exchange.strip().upper() == "NFO" else _SEGMENT_CASH
+
 # Our ProductType <-> Groww's raw product code. Groww's real codes ("MIS",
 # "CNC") are verified from the SDK's own constants
 # (GrowwAPI.PRODUCT_MIS/PRODUCT_CNC), not guessed.
@@ -122,6 +135,11 @@ class GrowwBrokerAdapter(Broker):
             GrowwTransportConfig(credentials=credentials, timeout_seconds=timeout_seconds)
         )
 
+    @property
+    def transport(self) -> GrowwHttpTransport:
+        """Exposed so callers can build a GrowwMarginCalculator from this adapter's own authenticated transport."""
+        return self._transport
+
     def place_order(self, order_request: OrderRequest) -> Order:
         """Build a Groww order payload, send it, and map the response back."""
         groww_request = self._build_groww_order_request(order_request)
@@ -139,7 +157,7 @@ class GrowwBrokerAdapter(Broker):
         return self._map_fetched_order(response)
 
     def list_positions(self) -> list[Position]:
-        """Fetch and map all current Groww cash-segment positions."""
+        """Fetch and map all current Groww positions, merging the CASH and FNO segments."""
         return [self._map_position(position) for position in self._fetch_positions()]
 
     # -- request building -------------------------------------------------
@@ -155,7 +173,10 @@ class GrowwBrokerAdapter(Broker):
             validity=_VALIDITY_DAY,
             price=order.price,
             trigger_price=order.trigger_price,
-            order_reference_id=order.client_order_id,
+            # SEBI's algo tag (order.algo_id) wins this field when
+            # configured, same reasoning as KiteBrokerAdapter - see
+            # core/broker/base.py's OrderRequest.algo_id docstring.
+            order_reference_id=order.algo_id or order.client_order_id,
         )
 
     # -- outbound calls (delegate to the transport; mockable in tests) ------
@@ -174,7 +195,7 @@ class GrowwBrokerAdapter(Broker):
         }
         if request.order_reference_id is not None:
             payload["order_reference_id"] = request.order_reference_id
-        data = self._transport.place_order(payload)
+        data = self._transport.place_order(payload, segment=_segment_for_exchange(request.exchange))
         return GrowwOrderResponse.from_place_order_json(data)
 
     def _send_cancel_order(self, order_id: str) -> GrowwCancelResponse:
@@ -186,8 +207,11 @@ class GrowwBrokerAdapter(Broker):
         return GrowwOrderResponse.from_order_detail_json(data)
 
     def _fetch_positions(self) -> list[GrowwPosition]:
-        data = self._transport.list_positions()
-        return [GrowwPosition.from_json(item) for item in data.get("positions", [])]
+        positions: list[GrowwPosition] = []
+        for segment in (_SEGMENT_CASH, _SEGMENT_FNO):
+            data = self._transport.list_positions(segment=segment)
+            positions.extend(GrowwPosition.from_json(item) for item in data.get("positions", []))
+        return positions
 
     # -- response mapping ---------------------------------------------------
 

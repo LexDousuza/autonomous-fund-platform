@@ -18,8 +18,10 @@ from unittest.mock import patch
 
 from apps.live_trader.config import (
     LIVE_CONFIRM_REQUIRED_VALUE,
+    OPTIONS_WRITING_CONFIRM_REQUIRED_VALUE,
     LiveTradingNotConfirmedError,
     MissingAngelOneCredentialsError,
+    OptionsWritingNotConfirmedError,
     load_angelone_credentials_from_env,
     load_live_trader_config_from_env,
 )
@@ -33,6 +35,9 @@ _ALL_LIVE_TRADER_ENV_VARS = (
     "LIVE_DRY_RUN",
     "LIVE_MAX_BARS",
     "LIVE_CONFIRM",
+    "LIVE_ENABLE_OPTIONS_WRITING",
+    "OPTIONS_WRITING_CONFIRM",
+    "LIVE_ANGELONE_LIVE_MODE",
 )
 
 
@@ -58,6 +63,23 @@ class LoadLiveTraderConfigFromEnvTests(unittest.TestCase):
         self.assertEqual(config.market_data_provider, "memory")
         self.assertFalse(config.requires_groww_credentials)
         self.assertFalse(config.requires_live_confirmation)
+        self.assertEqual(config.angelone_live_mode, "ltp")
+
+    def test_angelone_live_mode_defaults_to_ltp_and_accepts_candles(self) -> None:
+        os.environ["LIVE_MARKET_DATA_PROVIDER"] = "angelone"
+        os.environ["LIVE_ANGELONE_LIVE_MODE"] = "candles"
+
+        config = load_live_trader_config_from_env()
+
+        self.assertEqual(config.angelone_live_mode, "candles")
+
+    def test_unsupported_angelone_live_mode_raises(self) -> None:
+        os.environ["LIVE_MARKET_DATA_PROVIDER"] = "angelone"
+        os.environ["LIVE_ANGELONE_LIVE_MODE"] = "websocket"
+
+        with self.assertRaises(ValueError) as ctx:
+            load_live_trader_config_from_env()
+        self.assertIn("LIVE_ANGELONE_LIVE_MODE", str(ctx.exception))
 
     def test_paper_broker_with_groww_data_is_allowed(self) -> None:
         os.environ["LIVE_MARKET_DATA_PROVIDER"] = "groww"
@@ -74,6 +96,7 @@ class LoadLiveTraderConfigFromEnvTests(unittest.TestCase):
         os.environ["LIVE_BROKER_PROVIDER"] = "groww"
         os.environ["LIVE_MARKET_DATA_PROVIDER"] = "groww"
         os.environ["LIVE_CONFIRM"] = LIVE_CONFIRM_REQUIRED_VALUE
+        os.environ["LIVE_BROKER_ALGO_ID"] = "TEST-ALGO-ID"
 
         config = load_live_trader_config_from_env()
 
@@ -99,6 +122,7 @@ class LoadLiveTraderConfigFromEnvTests(unittest.TestCase):
         os.environ["LIVE_BROKER_PROVIDER"] = "kite"
         os.environ["LIVE_MARKET_DATA_PROVIDER"] = "kite"
         os.environ["LIVE_CONFIRM"] = LIVE_CONFIRM_REQUIRED_VALUE
+        os.environ["LIVE_BROKER_ALGO_ID"] = "TEST-ALGO-ID"
 
         config = load_live_trader_config_from_env()
 
@@ -119,6 +143,7 @@ class LoadLiveTraderConfigFromEnvTests(unittest.TestCase):
         os.environ["LIVE_BROKER_PROVIDER"] = "kite"
         os.environ["LIVE_MARKET_DATA_PROVIDER"] = "groww"
         os.environ["LIVE_CONFIRM"] = LIVE_CONFIRM_REQUIRED_VALUE
+        os.environ["LIVE_BROKER_ALGO_ID"] = "TEST-ALGO-ID"
 
         config = load_live_trader_config_from_env()
 
@@ -252,6 +277,74 @@ class LoadLiveTraderConfigFromEnvTests(unittest.TestCase):
 
         os.environ["LIVE_MAX_BARS"] = "10"
         self.assertEqual(load_live_trader_config_from_env().max_bars, 10)
+
+
+class OptionsWritingConfirmationGateTests(unittest.TestCase):
+    """The second, independent safety gate for naked option writing - stacks with LIVE_CONFIRM."""
+
+    def setUp(self) -> None:
+        patcher = patch.dict(os.environ, {}, clear=False)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        _clear_live_trader_env()
+
+    def _set_confirmed_live_groww_env(self) -> None:
+        os.environ["LIVE_BROKER_PROVIDER"] = "groww"
+        os.environ["LIVE_MARKET_DATA_PROVIDER"] = "groww"
+        os.environ["LIVE_CONFIRM"] = LIVE_CONFIRM_REQUIRED_VALUE
+        os.environ["LIVE_BROKER_ALGO_ID"] = "TEST-ALGO-ID"
+
+    def test_options_writing_disabled_by_default(self) -> None:
+        config = load_live_trader_config_from_env()
+        self.assertFalse(config.options_writing_enabled)
+        self.assertFalse(config.requires_options_writing_confirmation)
+
+    def test_options_writing_enabled_on_paper_never_requires_confirmation(self) -> None:
+        os.environ["LIVE_ENABLE_OPTIONS_WRITING"] = "true"
+        # broker stays "paper" (default) - no LIVE_CONFIRM/OPTIONS_WRITING_CONFIRM set.
+
+        config = load_live_trader_config_from_env()  # must not raise
+
+        self.assertTrue(config.options_writing_enabled)
+        self.assertFalse(config.requires_options_writing_confirmation)
+
+    def test_options_writing_enabled_on_live_broker_without_confirmation_raises(self) -> None:
+        self._set_confirmed_live_groww_env()
+        os.environ["LIVE_ENABLE_OPTIONS_WRITING"] = "true"
+        # OPTIONS_WRITING_CONFIRM intentionally left unset.
+
+        with self.assertRaises(OptionsWritingNotConfirmedError) as ctx:
+            load_live_trader_config_from_env()
+
+        self.assertIn("OPTIONS_WRITING_CONFIRM", str(ctx.exception))
+
+    def test_options_writing_enabled_on_live_broker_with_wrong_value_raises(self) -> None:
+        self._set_confirmed_live_groww_env()
+        os.environ["LIVE_ENABLE_OPTIONS_WRITING"] = "true"
+        os.environ["OPTIONS_WRITING_CONFIRM"] = "yes please"
+
+        with self.assertRaises(OptionsWritingNotConfirmedError):
+            load_live_trader_config_from_env()
+
+    def test_live_confirm_value_does_not_satisfy_options_writing_gate(self) -> None:
+        # The two confirmation strings must never be interchangeable.
+        self._set_confirmed_live_groww_env()
+        os.environ["LIVE_ENABLE_OPTIONS_WRITING"] = "true"
+        os.environ["OPTIONS_WRITING_CONFIRM"] = LIVE_CONFIRM_REQUIRED_VALUE
+
+        with self.assertRaises(OptionsWritingNotConfirmedError):
+            load_live_trader_config_from_env()
+
+    def test_both_gates_confirmed_on_live_broker_succeeds(self) -> None:
+        self._set_confirmed_live_groww_env()
+        os.environ["LIVE_ENABLE_OPTIONS_WRITING"] = "true"
+        os.environ["OPTIONS_WRITING_CONFIRM"] = OPTIONS_WRITING_CONFIRM_REQUIRED_VALUE
+
+        config = load_live_trader_config_from_env()  # must not raise
+
+        self.assertTrue(config.options_writing_enabled)
+        self.assertTrue(config.options_writing_confirmed)
+        self.assertTrue(config.requires_options_writing_confirmation)
 
 
 _ANGELONE_ENV_VARS = (

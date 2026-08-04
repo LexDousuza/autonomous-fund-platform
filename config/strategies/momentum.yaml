@@ -1,0 +1,19 @@
+strategy:
+  name: momentum
+
+params:
+  lookback_bars: 10
+  min_price_change_pct: 1.0
+  min_volume_multiplier: 1.5
+  session_window_minutes: 90
+  allow_multiple_entries: false
+
+# Momentum wants liquid names already trending up, early in the day -
+# see core/market_data/candidate_profile.py. rank_by_volatility keeps
+# the most active survivors when the daily bucket cap trims the list,
+# instead of the first N alphabetically.
+candidate_profile:
+  require_liquidity_and_uptrend: true
+  min_avg_volume: 50000
+  trend_lookback_bars: 10
+  rank_by_volatility: true

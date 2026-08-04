@@ -18,8 +18,18 @@ class MarketDataFeed(ABC):
     """
 
     @abstractmethod
-    def subscribe(self, symbol: str) -> None:
-        """Mark ``symbol`` as active so it is included in ``stream()``."""
+    def subscribe(self, symbol: str, exchange: str | None = None) -> None:
+        """
+        Mark ``symbol`` as active so it is included in ``stream()``.
+
+        ``exchange`` overrides this feed's default exchange for this one
+        symbol only (e.g. subscribing an NFO option contract on a feed
+        otherwise polling NSE cash-equity symbols - see
+        ``core/execution/orchestrator.py``'s naked-write-open handling).
+        ``None`` (the default) preserves every existing call site's
+        behavior unchanged: the symbol polls against the feed's own
+        single configured exchange, same as before this parameter existed.
+        """
         raise NotImplementedError
 
     @abstractmethod

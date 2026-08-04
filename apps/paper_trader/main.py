@@ -4,13 +4,28 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
-from apps.live_trader.config import GrowwEnvCredentials, load_groww_credentials_from_env
+from apps.live_trader.config import (
+    GrowwEnvCredentials,
+    KiteEnvCredentials,
+    load_groww_credentials_from_env,
+    load_kite_credentials_from_env,
+)
+from apps.live_trader.main import (
+    ACTIVE_PORTFOLIO_PATH,
+    APPROVED_CAPITAL_PATH,
+    build_exit_policy_for_strategy,
+    check_holding_period_is_supported,
+    load_active_portfolio,
+    load_strategy_config,
+)
 from apps.paper_trader.config import PaperTraderConfig, load_paper_trader_config_from_env
+from core.allocations.approved_capital import load_approved_capital
 from core.allocations.daily_mandate import DailyMandate, load_daily_mandate
 from core.audit.file_sink import FileAuditSink
 from core.audit.models import SessionMetadata, SessionSummary
 from core.audit.sink import AuditSink
 from core.broker.base import Broker
+from core.broker.estimated_margin import EstimatedSpanMarginCalculator
 from core.broker.factory import build_broker
 from core.broker.factory_models import BrokerConfig
 from core.execution.models import ExecutionSessionResult, TradingSessionConfig
@@ -20,22 +35,38 @@ from core.market_data.bucket_selector import (
     BucketSelectionResult,
     CapitalRiskBucketSelector,
 )
+from core.market_data.candidate_profile import CandidateProfile
 from core.market_data.factory import build_market_data_feed
 from core.market_data.factory_models import MarketDataConfig
+from core.market_data.fo_iv_screen import resolve_iv_by_symbol
+from core.market_data.kite_option_chain import KiteOptionChainProvider
+from core.market_data.kite_transport import (
+    KiteMarketDataCredentials,
+    KiteMarketDataTransport,
+    KiteMarketDataTransportConfig,
+)
 from core.market_data.memory_feed import MemoryMarketDataFeed
 from core.market_data.service import MarketDataService
 from core.market_data.universe_loader import load_instrument_universe
 from core.market_data.universe_models import Instrument
 from core.market_data.universe_selector import TradingUniverseSelector, UniverseSelectionCriteria
-from core.portfolio.allocation import build_portfolio_allocation_plan
+from core.portfolio.allocation import build_portfolio_allocation_plan, build_portfolio_allocation_plans
 from core.portfolio.exit_models import ExitPolicyConfig, parse_time_of_day
 from core.portfolio.models import PortfolioAllocationPlan
-from core.risk.simple_intraday import SimpleIntradayRiskManager
+from core.risk.options_margin import OptionsMarginRiskManager
+from core.risk.simple_intraday import (
+    DEFAULT_MIN_PROFIT_TO_BROKERAGE_RATIO_OVERRIDES,
+    IntradayRiskSettings,
+    SimpleIntradayRiskManager,
+)
 from core.strategy.base import MarketBar
+import core.strategy.credit_spread  # noqa: F401  (registers the strategy)
+import core.strategy.options_mispricing  # noqa: F401  (registers the strategy)
 import core.strategy.simple_breakout_momentum  # noqa: F401  (registers the strategy)
 
 MANDATE_PATH = "config/mandates/sample_mandate.yaml"
 UNIVERSE_PATH = "config/instruments/india_cash_universe.yaml"
+INDEX_UNIVERSE_PATH = "config/instruments/india_index_universe.yaml"
 
 
 # (open_delta, high_delta, low_delta, close_delta, volume) per bar,
@@ -132,27 +163,49 @@ def _apply_config_overrides(mandate: DailyMandate, config: PaperTraderConfig) ->
 def _build_candidate_market_data_config(
     config: PaperTraderConfig,
     candidate_instruments: list[Instrument],
-    credentials: GrowwEnvCredentials | None,
+    groww_credentials: GrowwEnvCredentials | None,
+    kite_credentials: KiteEnvCredentials | None = None,
 ) -> MarketDataConfig:
     """
     Build the ``MarketDataConfig`` covering every *candidate* instrument
     (not yet the bucket) - bucket selection needs each candidate's price
-    history before it can decide which ones make the cut.
+    history before it can decide which ones make the cut. When
+    ``CandidateProfile.fixed_universe_segment`` is set, ``candidate_instruments``
+    is already the small fixed set (e.g. NIFTY/BANKNIFTY) rather than the
+    full cash-equity universe - this function doesn't need to know or
+    care, it just fetches history for whatever list it's given.
 
-    ``"groww"`` fetches real historical candles for the configured date
-    range/interval. ``"memory"`` (the default) generates the same
-    synthetic demo bars the paper trader has always used, just for the
-    full candidate set instead of a pre-filtered one - bucket selection
-    runs identically either way, since it only cares about price history,
-    not where it came from.
+    ``"groww"``/``"kite"`` fetch real historical candles for the
+    configured date range/interval. ``"memory"`` (the default) generates
+    the same synthetic demo bars the paper trader has always used, just
+    for the full candidate set instead of a pre-filtered one - bucket
+    selection runs identically either way, since it only cares about
+    price history, not where it came from.
     """
     if config.market_data_provider == "groww":
         return MarketDataConfig(
             provider="groww",
             mode="historical",
             metadata={
-                "api_key": credentials.api_key,
-                "secret": credentials.secret,
+                "api_key": groww_credentials.api_key,
+                "secret": groww_credentials.secret,
+                "instruments": [
+                    {"symbol": instrument.symbol, "exchange": instrument.exchange}
+                    for instrument in candidate_instruments
+                ],
+                "from_date": config.historical_from_date,
+                "to_date": config.historical_to_date,
+                "interval": config.historical_interval,
+            },
+        )
+
+    if config.market_data_provider == "kite":
+        return MarketDataConfig(
+            provider="kite",
+            mode="historical",
+            metadata={
+                "api_key": kite_credentials.api_key,
+                "access_token": kite_credentials.access_token,
                 "instruments": [
                     {"symbol": instrument.symbol, "exchange": instrument.exchange}
                     for instrument in candidate_instruments
@@ -167,6 +220,82 @@ def _build_candidate_market_data_config(
         provider="memory",
         mode="paper",
         metadata={"bars": build_session_bars(candidate_instruments)},
+    )
+
+
+@dataclass(slots=True)
+class _StrategyBucketSelection:
+    candidate_instruments: list[Instrument]
+    bucket_result: BucketSelectionResult
+    session_symbols: list[str]
+    market_data_config: MarketDataConfig
+    market_data_feed: object
+
+
+def _select_strategy_bucket(
+    paper_config: PaperTraderConfig,
+    universe_path: str,
+    mandate: DailyMandate,
+    allocation_plan: PortfolioAllocationPlan,
+    candidate_profile: CandidateProfile,
+    groww_credentials: GrowwEnvCredentials | None,
+    kite_credentials: KiteEnvCredentials | None,
+) -> _StrategyBucketSelection:
+    """
+    Candidate-instrument selection + bucket selection for ONE strategy -
+    shared by ``build_paper_session`` (one strategy, one call) and
+    ``build_paper_portfolio_session`` (N strategies, one call each,
+    each against its own apportioned ``allocation_plan``). Extracted
+    verbatim from ``build_paper_session``'s steps 3-5 - see that
+    function's inline comments (before this extraction) for the full
+    reasoning behind each branch.
+    """
+    if candidate_profile.fixed_universe_segment is not None:
+        universe = load_instrument_universe(INDEX_UNIVERSE_PATH)
+        candidate_instruments = TradingUniverseSelector().select(
+            universe, UniverseSelectionCriteria(segment=candidate_profile.fixed_universe_segment)
+        )
+    else:
+        universe = load_instrument_universe(universe_path)
+        candidate_instruments = TradingUniverseSelector().select(
+            universe, UniverseSelectionCriteria(exchange="NSE")
+        )
+
+    market_data_config = _build_candidate_market_data_config(
+        paper_config, candidate_instruments, groww_credentials, kite_credentials
+    )
+    market_data_feed = build_market_data_feed(market_data_config)
+    price_history = {
+        instrument.symbol: market_data_feed.get_history(instrument.symbol)
+        for instrument in candidate_instruments
+    }
+
+    if candidate_profile.fixed_universe_segment is not None:
+        bucket_result = BucketSelectionResult(selected=candidate_instruments)
+    else:
+        bucket_criteria = BucketSelectionCriteria(
+            risk_appetite=mandate.risk_appetite,
+            max_capital_per_trade=allocation_plan.max_capital_per_trade,
+            max_bucket_size=allocation_plan.max_open_positions,
+            rank_by_volatility=candidate_profile.rank_by_volatility,
+        )
+        iv_by_symbol = resolve_iv_by_symbol(
+            candidate_instruments,
+            price_history,
+            paper_config.market_data_provider,
+            groww_credentials,
+            kite_credentials,
+        )
+        bucket_result = CapitalRiskBucketSelector().select(
+            candidate_instruments, price_history, bucket_criteria, iv_by_symbol
+        )
+
+    return _StrategyBucketSelection(
+        candidate_instruments=candidate_instruments,
+        bucket_result=bucket_result,
+        session_symbols=[instrument.symbol for instrument in bucket_result.selected],
+        market_data_config=market_data_config,
+        market_data_feed=market_data_feed,
     )
 
 
@@ -187,53 +316,62 @@ def build_paper_session(
     paper_config = config if config is not None else load_paper_trader_config_from_env()
 
     # 1) load today's mandate, apply this run's capital/risk-appetite
-    #    overrides (if any), and derive the day's allocation plan.
+    #    overrides (if any), and derive the day's allocation plan. Also
+    #    load which strategy this session runs (see load_strategy_config,
+    #    reused from apps.live_trader.main) - previously hardcoded to
+    #    simple_breakout_momentum with empty params; the default
+    #    strategy_config_path reproduces that exactly (see
+    #    PaperTraderConfig's docstring).
     mandate = load_daily_mandate(mandate_path)
     _apply_config_overrides(mandate, paper_config)
     allocation_plan = build_portfolio_allocation_plan(mandate)
-
-    # 2) load the configured instrument universe and select this
-    #    session's CANDIDATE instruments - every enabled NSE instrument,
-    #    not yet the tradable bucket. Bucket selection (step 4) narrows
-    #    this down by capital/risk appetite.
-    universe = load_instrument_universe(universe_path)
-    candidate_instruments = TradingUniverseSelector().select(
-        universe, UniverseSelectionCriteria(exchange="NSE")
+    strategy_name, strategy_params, candidate_profile = load_strategy_config(
+        paper_config.strategy_config_path
     )
+    check_holding_period_is_supported(strategy_name)
 
-    # 3) load Groww credentials only if real historical data was
-    #    requested, and build+fetch price history for every candidate -
-    #    bucket selection needs prices before it can judge affordability/
-    #    volatility for any of them.
-    credentials: GrowwEnvCredentials | None = None
+    # 2) load Groww/Kite credentials only if actually requested, ahead of
+    #    everything below that might need them (candidate market data,
+    #    the IV screen, and the options-chain-provider injection).
+    groww_credentials: GrowwEnvCredentials | None = None
     if paper_config.requires_groww_credentials:
-        credentials = load_groww_credentials_from_env()
+        groww_credentials = load_groww_credentials_from_env()
 
-    market_data_config = _build_candidate_market_data_config(
-        paper_config, candidate_instruments, credentials
-    )
-    market_data_feed = build_market_data_feed(market_data_config)
-    price_history = {
-        instrument.symbol: market_data_feed.get_history(instrument.symbol)
-        for instrument in candidate_instruments
-    }
+    kite_credentials: KiteEnvCredentials | None = None
+    if paper_config.requires_kite_credentials:
+        kite_credentials = load_kite_credentials_from_env()
+        # Injected unconditionally whenever Kite credentials are loaded -
+        # harmless (an unused dict key) for a cash-equity strategy, the
+        # only way an options-based strategy's option_chain_provider
+        # param (see core.strategy.options_mispricing's docstring) is
+        # ever populated for a paper session. Mirrors
+        # apps/live_trader/main.py's identical injection.
+        strategy_params["option_chain_provider"] = KiteOptionChainProvider(
+            KiteMarketDataTransport(
+                KiteMarketDataTransportConfig(
+                    credentials=KiteMarketDataCredentials(
+                        api_key=kite_credentials.api_key, access_token=kite_credentials.access_token
+                    )
+                )
+            ),
+            risk_free_rate=float(strategy_params.get("risk_free_rate", 0.07)),
+        )
 
-    # 4) select the day's tradable bucket from the candidates: hard
-    #    affordability filter plus a volatility ceiling driven by
-    #    mandate.risk_appetite, capped at the allocation plan's max open
-    #    positions (no point selecting more names than positions the
-    #    session could ever hold at once).
-    bucket_criteria = BucketSelectionCriteria(
-        risk_appetite=mandate.risk_appetite,
-        max_capital_per_trade=allocation_plan.max_capital_per_trade,
-        max_bucket_size=allocation_plan.max_open_positions,
+    # 3-5) candidate-instrument selection + bucket selection - see
+    #    _select_strategy_bucket's docstring; extracted so
+    #    build_paper_portfolio_session can call it once per active
+    #    strategy without duplicating this logic.
+    selection = _select_strategy_bucket(
+        paper_config, universe_path, mandate, allocation_plan, candidate_profile,
+        groww_credentials, kite_credentials,
     )
-    bucket_result = CapitalRiskBucketSelector().select(
-        candidate_instruments, price_history, bucket_criteria
-    )
-    session_symbols = [instrument.symbol for instrument in bucket_result.selected]
+    candidate_instruments = selection.candidate_instruments
+    bucket_result = selection.bucket_result
+    session_symbols = selection.session_symbols
+    market_data_config = selection.market_data_config
+    market_data_feed = selection.market_data_feed
 
-    # 5) build the actual SESSION feed from only the bucket's already-
+    # 6) build the actual SESSION feed from only the bucket's already-
     #    fetched bars (no second network round-trip for the groww
     #    provider - get_history() just reads back what step 3 already
     #    cached). This is deliberately a *fresh*, bucket-only feed rather
@@ -250,11 +388,23 @@ def build_paper_session(
         key=lambda bar: (bar.timestamp, bar.symbol),
     )
 
-    # 6) initialize dependencies. The broker is built through the broker
+    # 7) initialize dependencies. The broker is built through the broker
     #    factory rather than instantiated directly.
     broker_config = BrokerConfig(provider="paper", mode="paper")
     broker = build_broker(broker_config)
-    risk_manager = SimpleIntradayRiskManager()
+    # A naive, paper-only margin simulation (see EstimatedSpanMarginCalculator's
+    # docstring) so a naked-write-open here actually exercises
+    # OptionsMarginRiskManager's fail-closed gate - matching the
+    # real gating a Kite/Groww live session applies - rather than being
+    # approved purely on capital-sizing grounds as before.
+    risk_manager = OptionsMarginRiskManager(
+        SimpleIntradayRiskManager(
+            IntradayRiskSettings(
+                min_profit_to_brokerage_ratio_by_strategy=DEFAULT_MIN_PROFIT_TO_BROKERAGE_RATIO_OVERRIDES
+            )
+        ),
+        margin_calculator=EstimatedSpanMarginCalculator(),
+    )
 
     market_data_service = MarketDataService()
     market_data_service.register_feed("paper_session", MemoryMarketDataFeed(bars=session_bars))
@@ -265,7 +415,7 @@ def build_paper_session(
         broker=broker,
     )
 
-    # 7) describe the session (including V1 intraday exit rules) and hand
+    # 8) describe the session (including V1 intraday exit rules) and hand
     #    it to the orchestrator. Order quantity is not set here:
     #    ExecutionOrchestrator derives it per signal via
     #    PositionSizingEngine, from allocation_plan.max_capital_per_trade
@@ -278,16 +428,27 @@ def build_paper_session(
         if mandate.risk_limits.force_square_off_at
         else None
     )
-    exit_policy = ExitPolicyConfig(stop_loss_pct=1.5, target_pct=2.0, square_off_time=square_off_time)
+    # See apps/live_trader/main.py's build_exit_policy_for_strategy: most
+    # strategies get the platform's flat 1.5%/2.0% default (deliberately
+    # NOT ATR-based - a prior pass measured that as actively harmful on
+    # real 1-minute bars), but a strategy whose own design requires
+    # square_off_time alone gets exactly that instead.
+    exit_policy = build_exit_policy_for_strategy(strategy_name, square_off_time)
 
     session_config = TradingSessionConfig(
         trading_date=allocation_plan.trading_date,
-        strategy_name="simple_breakout_momentum",
-        strategy_params={},
+        strategy_name=strategy_name,
+        strategy_params=strategy_params,
         execution_mode=allocation_plan.execution_mode,
         symbols=session_symbols,
         portfolio_allocation_plan=allocation_plan,
         exit_policy=exit_policy,
+        # Simulated available margin for the estimator above to compare
+        # against - reuses the session's own intraday capital budget
+        # rather than inventing a separate paper-margin config value,
+        # since paper trading has no real margin concept to draw a more
+        # precise figure from anyway.
+        available_margin=allocation_plan.intraday_capital,
     )
 
     return PaperSessionContext(
@@ -450,8 +611,293 @@ def run_paper_session(audit_sink: AuditSink | None = None) -> ExecutionSessionRe
         raise
 
 
+@dataclass(slots=True)
+class PaperPortfolioSessionContext:
+    """Everything needed to run a multi-strategy autonomous paper trading session."""
+
+    paper_config: PaperTraderConfig
+    mandate: DailyMandate
+    approved_capital: float
+    allocation_plans: dict[str, PortfolioAllocationPlan]
+    selections: dict[str, _StrategyBucketSelection]
+    broker_config: BrokerConfig
+    broker: Broker
+    orchestrator: ExecutionOrchestrator
+    session_configs: list[TradingSessionConfig]
+
+
+def build_paper_portfolio_session(
+    mandate_path: str = MANDATE_PATH,
+    universe_path: str = UNIVERSE_PATH,
+    active_portfolio_path: str = ACTIVE_PORTFOLIO_PATH,
+    approved_capital_path: str = APPROVED_CAPITAL_PATH,
+    config: PaperTraderConfig | None = None,
+) -> PaperPortfolioSessionContext:
+    """
+    Build everything needed for a multi-strategy autonomous paper trading
+    session, without running it - the N-strategy sibling of
+    ``build_paper_session``.
+
+    The human's only lever is ``approved_capital_path``'s total (see
+    ``core.allocations.approved_capital``) - it overrides
+    ``mandate.buckets.intraday_bucket`` via the exact same in-memory-only
+    override mechanism ``build_paper_session`` already uses for its
+    debug-only ``PAPER_INTRADAY_CAPITAL`` env var, just always applied
+    here rather than optional, since it's portfolio mode's one required
+    approval gate rather than a debug convenience. Which strategies are
+    active is ``active_portfolio_path``'s plain, git-tracked list - not a
+    second approval ceremony.
+    """
+    paper_config = config if config is not None else load_paper_trader_config_from_env()
+
+    mandate = load_daily_mandate(mandate_path)
+    approved_capital = load_approved_capital(approved_capital_path)
+    mandate.buckets.intraday_bucket = approved_capital
+    if paper_config.risk_appetite_override is not None:
+        mandate.risk_appetite = paper_config.risk_appetite_override
+    mandate.validate()
+
+    strategy_paths = load_active_portfolio(active_portfolio_path)
+    strategy_configs = [load_strategy_config(path) for path in strategy_paths]
+    strategy_names = [name for name, _, _ in strategy_configs]
+    if len(set(strategy_names)) != len(strategy_names):
+        raise ValueError(f"{active_portfolio_path} lists the same strategy more than once")
+    for name in strategy_names:
+        check_holding_period_is_supported(name)
+
+    allocation_plans = build_portfolio_allocation_plans(mandate, strategy_names)
+
+    groww_credentials: GrowwEnvCredentials | None = None
+    if paper_config.requires_groww_credentials:
+        groww_credentials = load_groww_credentials_from_env()
+
+    kite_credentials: KiteEnvCredentials | None = None
+    if paper_config.requires_kite_credentials:
+        kite_credentials = load_kite_credentials_from_env()
+
+    selections: dict[str, _StrategyBucketSelection] = {}
+    for strategy_name, strategy_params, candidate_profile in strategy_configs:
+        if kite_credentials is not None:
+            # Unconditional whenever Kite credentials are loaded, exactly
+            # as build_paper_session does - harmless for a cash-equity
+            # strategy, the only way an options strategy's
+            # option_chain_provider param gets populated for paper mode.
+            strategy_params["option_chain_provider"] = KiteOptionChainProvider(
+                KiteMarketDataTransport(
+                    KiteMarketDataTransportConfig(
+                        credentials=KiteMarketDataCredentials(
+                            api_key=kite_credentials.api_key, access_token=kite_credentials.access_token
+                        )
+                    )
+                ),
+                risk_free_rate=float(strategy_params.get("risk_free_rate", 0.07)),
+            )
+        selections[strategy_name] = _select_strategy_bucket(
+            paper_config,
+            universe_path,
+            mandate,
+            allocation_plans[strategy_name],
+            candidate_profile,
+            groww_credentials,
+            kite_credentials,
+        )
+
+    # One canonical bar stream for the whole portfolio: the first
+    # strategy (in active_portfolio.yaml order) to select a given symbol
+    # supplies its bars for everyone - avoids two strategies that
+    # independently select the same symbol seeing two inconsistent,
+    # independently-fetched/generated copies (most concretely an issue
+    # for the "memory" provider's synthetic demo bars, which price an
+    # instrument by its position in whatever candidate list generated it;
+    # for a real Kite/Groww historical fetch this is simply the same real
+    # data either way).
+    session_bars_by_key: dict[tuple[str, str], list[MarketBar]] = {}
+    for strategy_name in strategy_names:
+        selection = selections[strategy_name]
+        for instrument in selection.bucket_result.selected:
+            key = (instrument.exchange, instrument.symbol)
+            if key not in session_bars_by_key:
+                session_bars_by_key[key] = selection.market_data_feed.get_history(instrument.symbol)
+
+    session_bars = sorted(
+        (bar for bars in session_bars_by_key.values() for bar in bars),
+        key=lambda bar: (bar.timestamp, bar.symbol),
+    )
+
+    broker_config = BrokerConfig(provider="paper", mode="paper")
+    broker = build_broker(broker_config)
+    risk_manager = OptionsMarginRiskManager(
+        SimpleIntradayRiskManager(
+            IntradayRiskSettings(
+                min_profit_to_brokerage_ratio_by_strategy=DEFAULT_MIN_PROFIT_TO_BROKERAGE_RATIO_OVERRIDES
+            )
+        ),
+        margin_calculator=EstimatedSpanMarginCalculator(),
+    )
+
+    market_data_service = MarketDataService()
+    market_data_service.register_feed("paper_portfolio_session", MemoryMarketDataFeed(bars=session_bars))
+
+    orchestrator = ExecutionOrchestrator(
+        market_data_service=market_data_service,
+        risk_manager=risk_manager,
+        broker=broker,
+    )
+
+    square_off_time = (
+        parse_time_of_day(mandate.risk_limits.force_square_off_at)
+        if mandate.risk_limits.force_square_off_at
+        else None
+    )
+
+    # Per-strategy, not one shared policy for the whole portfolio - see
+    # build_exit_policy_for_strategy's docstring: a strategy whose own
+    # design requires square_off_time alone must actually get that,
+    # regardless of which other strategies are active alongside it.
+    session_configs = [
+        TradingSessionConfig(
+            trading_date=allocation_plans[strategy_name].trading_date,
+            strategy_name=strategy_name,
+            strategy_params=strategy_params,
+            execution_mode=allocation_plans[strategy_name].execution_mode,
+            symbols=selections[strategy_name].session_symbols,
+            portfolio_allocation_plan=allocation_plans[strategy_name],
+            exit_policy=build_exit_policy_for_strategy(strategy_name, square_off_time),
+            available_margin=allocation_plans[strategy_name].intraday_capital,
+        )
+        for strategy_name, strategy_params, _ in strategy_configs
+    ]
+
+    return PaperPortfolioSessionContext(
+        paper_config=paper_config,
+        mandate=mandate,
+        approved_capital=approved_capital,
+        allocation_plans=allocation_plans,
+        selections=selections,
+        broker_config=broker_config,
+        broker=broker,
+        orchestrator=orchestrator,
+        session_configs=session_configs,
+    )
+
+
+def print_portfolio_startup_banner(ctx: PaperPortfolioSessionContext) -> None:
+    print("=== PAPER PORTFOLIO TRADER START ===")
+    print(f"Trading date: {ctx.mandate.trading_date}")
+    print(f"Approved capital: {ctx.approved_capital}")
+    print(f"Risk appetite: {ctx.mandate.risk_appetite}")
+    print(f"Broker: {ctx.broker_config.provider}/{ctx.broker_config.mode}")
+    active_names = [config.strategy_name for config in ctx.session_configs]
+    print(f"Active strategies ({len(active_names)}): {', '.join(active_names)}")
+    print()
+
+    for config in ctx.session_configs:
+        plan = config.portfolio_allocation_plan
+        selection = ctx.selections[config.strategy_name]
+        print(f"--- {config.strategy_name} ---")
+        print(f"  Intraday capital: {plan.intraday_capital}")
+        print(
+            f"  Bucket selected ({len(selection.session_symbols)}): "
+            f"{', '.join(selection.session_symbols) or 'none'}"
+        )
+    print()
+
+
+def run_paper_portfolio_session(
+    audit_sink: AuditSink | None = None,
+    mandate_path: str = MANDATE_PATH,
+    universe_path: str = UNIVERSE_PATH,
+    active_portfolio_path: str = ACTIVE_PORTFOLIO_PATH,
+    approved_capital_path: str = APPROVED_CAPITAL_PATH,
+    config: PaperTraderConfig | None = None,
+) -> dict[str, ExecutionSessionResult]:
+    """
+    Build a multi-strategy autonomous paper session, print each active
+    strategy's pre-flight banner and summary, run it, and persist one
+    combined audit session - the N-strategy sibling of ``run_paper_session``.
+    """
+    sink = audit_sink if audit_sink is not None else FileAuditSink()
+    session_id = _generate_session_id()
+    started_at = datetime.now(UTC)
+
+    try:
+        ctx = build_paper_portfolio_session(
+            mandate_path=mandate_path,
+            universe_path=universe_path,
+            active_portfolio_path=active_portfolio_path,
+            approved_capital_path=approved_capital_path,
+            config=config,
+        )
+    except Exception as exc:
+        sink.start_session(SessionMetadata(session_id=session_id, app_name="paper_trader", started_at=started_at))
+        sink.record_failure(exc)
+        raise
+
+    strategy_names = [config.strategy_name for config in ctx.session_configs]
+    sink.start_session(
+        SessionMetadata(
+            session_id=session_id,
+            app_name="paper_trader",
+            started_at=started_at,
+            trading_date=ctx.mandate.trading_date,
+            strategy_name=", ".join(strategy_names),
+            strategy_names=strategy_names,
+            broker_provider=ctx.broker_config.provider,
+            broker_mode=ctx.broker_config.mode,
+            subscribed_symbols=sorted({s for config in ctx.session_configs for s in config.symbols}),
+        )
+    )
+    ctx.orchestrator.audit_sink = sink
+    print_portfolio_startup_banner(ctx)
+
+    try:
+        results = ctx.orchestrator.run_portfolio_session(ctx.session_configs)
+        for strategy_name in strategy_names:
+            print_session_summary(results[strategy_name])
+        sink.finalize_session(
+            SessionSummary(
+                strategy_name=", ".join(strategy_names),
+                strategy_names=strategy_names,
+                trading_date=ctx.mandate.trading_date,
+                processed_bars=sum(r.processed_bars for r in results.values()),
+                generated_signals=sum(r.generated_signals for r in results.values()),
+                symbols_with_signals=sorted({s for r in results.values() for s in r.symbols_with_signals}),
+                approved_signals=sum(r.approved_signals for r in results.values()),
+                rejected_signals=sum(r.rejected_signals for r in results.values()),
+                skipped_due_to_session_guardrails=sum(
+                    r.skipped_due_to_session_guardrails for r in results.values()
+                ),
+                skipped_due_to_position_limits=sum(r.skipped_due_to_position_limits for r in results.values()),
+                placed_orders=[o for r in results.values() for o in r.placed_orders],
+                exit_decisions=[d for r in results.values() for d in r.exit_decisions],
+                exit_orders=[o for r in results.values() for o in r.exit_orders],
+                final_positions=ctx.broker.list_positions(),
+                # No single SessionRiskState makes sense across N
+                # independent per-strategy guardrails - see each
+                # result's own final_session_risk_state, or the
+                # per-strategy-attributed events.jsonl, for the real
+                # per-strategy detail.
+                final_session_risk_state=None,
+                succeeded=True,
+                duplicate_orders_blocked=sum(r.duplicate_orders_blocked for r in results.values()),
+            )
+        )
+        return results
+    except Exception as exc:
+        sink.record_failure(exc)
+        raise
+
+
 def main() -> None:
-    run_paper_session()
+    # Dispatch, not run_paper_session itself: today's single-strategy
+    # entrypoint stays completely untouched (no new dependency on
+    # active_portfolio.yaml) so every existing direct caller/test of it
+    # is unaffected - only the CLI entrypoint gains the new decision.
+    active_strategies = load_active_portfolio(ACTIVE_PORTFOLIO_PATH)
+    if len(active_strategies) > 1:
+        run_paper_portfolio_session()
+    else:
+        run_paper_session()
 
 
 if __name__ == "__main__":

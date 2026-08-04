@@ -1,0 +1,111 @@
+id: FEAT-0012
+feature: india_vix_percentile_mean_reversion
+hypothesis: >
+  Elevated India VIX (top decile of its own trailing 60-trading-day
+  percentile rank) predicts a positive forward 5-trading-day NIFTY return
+  - a fear-spike/mean-reversion effect.
+economic_mechanism: >
+  VIX spikes reflect acute, often overdone fear/hedging demand around a
+  shock; markets historically tend to overreact to the triggering event,
+  and both the elevated implied-vol premium itself and the price
+  dislocation tend to mean-revert once the shock is absorbed - the
+  well-documented "VIX spike -> rebound" pattern from US equity research,
+  tested here for the first time on NIFTY/India VIX specifically.
+question_2_redundancy_check: >
+  Distinct from EXP-0001/EXP-0002 (VRP, which tests whether IV exceeds
+  SUBSEQUENTLY REALIZED vol on the same underlying's own options - a
+  volatility-premium magnitude claim) and from FEAT-0005 (iv_rv_ratio,
+  which tests whether the IV/trailing-RV ratio predicts return direction,
+  also options-IV-derived). This feature is the first to use India VIX
+  (a market-wide fear gauge, not a same-underlying options measure) and
+  tests the LEVEL of that gauge, normalized against its own recent range,
+  against subsequent index price DIRECTION - a directional/timing claim,
+  not a volatility-premium claim.
+
+methodology: >
+  Index-only time-series test (single NIFTY/VIX pair per date, no
+  cross-section - same shape as FEAT-0005/iv_rv_ratio's index-only
+  features), but event-conditioned rather than a full-range correlation:
+  restrict to dates where India VIX's trailing-60-day percentile rank is
+  >= 0.90 ("elevated"/top-decile), collect NIFTY's forward 5-day return on
+  each such date, then bootstrap/permutation-test that set of per-
+  observation forward returns against a zero mean - exactly the same
+  tooling and per-observation-value-series shape used for VRP's (IV -
+  subsequent RV) spread (core.backtest.significance.bootstrap_mean_ci +
+  permutation_test_vs_zero), not the pairs-bootstrap correlation test used
+  for iv_rv_ratio/pcr (this hypothesis is about a subset/threshold effect,
+  not a full-range monotonic relationship). See
+  scripts/measure_india_vix_mean_reversion.py for the full parameter
+  rationale (60-day window matches core.analytics.features.beta's existing
+  lookback_days=60 convention; top decile matches the "spike" bar used in
+  the US VIX literature this hypothesis borrows from; 5-day horizon
+  matches this project's project-wide FORWARD_HORIZON_DAYS convention). A
+  3-day horizon was also computed on the same elevated-day set and is
+  recorded below as SECONDARY/exploratory only - it was never part of the
+  pass/fail decision.
+dataset: data/processed/nse_india_vix_daily.csv + data/processed/nse_index_options_iv_history.csv (NIFTY spot only)
+period: 2016-08-08 to 2026-07-24 (India VIX start to NIFTY spot data end; 2,412 dates with a full 60-day trailing window)
+parameters: {lookback_days: 60, elevated_percentile_threshold: 0.90, forward_horizon_days: 5}
+
+bootstrap_ci:
+  point_estimate: 0.0007453493617417948
+  lower: -0.0021316723669854896
+  upper: 0.0036078776646435557
+  n_resamples: 2000
+p_value: 0.6755
+fdr_corrected: false   # single-feature test, not run as part of a Phase A/B batch - no FDR correction applies
+n_observations: 397
+
+secondary_exploratory_not_decision_relevant:
+  horizon_days: 3
+  mean_forward_return: 0.0007034368305798993
+  n: 397
+  note: >
+    Reported only for context, per the pre-registered plan in
+    scripts/measure_india_vix_mean_reversion.py - not tested for
+    significance, not used in the decision below.
+context_unconditional_baseline:
+  horizon_days: 5
+  mean_forward_return_all_eligible_days: 0.002436424295713159
+  n: 2390
+  note: >
+    Unconditional mean forward return across ALL 2,390 eligible days
+    (elevated or not) - included only to show the elevated-day mean
+    (0.075%) is actually BELOW this unconditional baseline (0.244%), the
+    opposite direction from what the hypothesis predicts. Not a formal
+    test (that would require a second comparison, not pre-registered) -
+    descriptive context only.
+
+git_commit: 7507cb254900f4f6106823bc6b02c06308d77c51
+data_snapshot_id: null   # not hashed for this daily file - see docs/research/experiments/README.md's rationale
+python_version: "3.14.2"
+random_seed: 0
+
+date_opened: 2026-08-05
+date_decided: 2026-08-05
+decision: fail
+reason: >
+  Clean null result, tested exactly once against the pre-registered
+  definition (60-day trailing percentile rank, top-decile threshold,
+  5-day primary horizon - see scripts/measure_india_vix_mean_reversion.py
+  for why each was chosen before running this). n=397 elevated-VIX days
+  (16.6% of 2,412 eligible dates, close to the 10% nominal decile rate
+  since VIX readings cluster near recent highs during real multi-day
+  spikes rather than landing on isolated single days). Mean forward 5-day
+  NIFTY return on those days: +0.075%, 90% bootstrap CI
+  [-0.213%, +0.361%] - straddles zero comfortably, permutation p=0.6755,
+  nowhere near the p<=0.05 bar. No basis to reject a zero-edge null. If
+  anything mildly the opposite of the hypothesis: the unconditional
+  baseline mean forward 5-day return across ALL eligible days (elevated
+  or not) is +0.244%, higher than the elevated-day-conditional mean -
+  descriptive only, not itself tested, but it rules out any temptation to
+  read the null result as "underpowered but probably real." Not re-tested
+  with a different window/threshold after seeing this - per this
+  project's no-data-dredging norm (see FEAT-0001's multi-revision history
+  for why that discipline is enforced here), a second, differently-tuned
+  attempt is recorded only as an open follow-up thread, not run now:
+  a 90-day trailing window, a top-quartile threshold, or the 3-day
+  horizon as PRIMARY (its own secondary number here, +0.070%, is just as
+  flat) are all live candidates for a genuinely separate, freshly-
+  pre-registered test if this thread is picked back up - none of them
+  should inherit or be blended with this entry's result.

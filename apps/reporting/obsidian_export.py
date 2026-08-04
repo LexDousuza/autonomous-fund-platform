@@ -38,6 +38,7 @@ from apps.reporting.dashboard import (
     SESSIONS_DIR,
     UNIVERSE_PATH,
     _all_session_dirs,
+    _latest_candidate_selection,
     _latest_session_dir,
     _load_events,
 )
@@ -84,13 +85,114 @@ def _text_meter(pct: float, width: int = 20) -> str:
     return "`[" + "█" * filled + "░" * (width - filled) + "]`"
 
 
+def _escape_md_cell(value: object) -> str:
+    """
+    A literal ``|`` in cell content (common in real news headlines, e.g.
+    "X | Y" title formats) would otherwise be read as a column
+    separator and corrupt the table - escape it, and collapse any
+    embedded newline, since a Markdown table row must stay on one line.
+    """
+    return str(value).replace("|", "\\|").replace("\n", " ")
+
+
 def _md_table(headers: list[str], rows: list[list[str]], empty_message: str) -> str:
     if not rows:
         return f"*{empty_message}*\n"
     header_line = "| " + " | ".join(headers) + " |"
     sep_line = "| " + " | ".join("---" for _ in headers) + " |"
-    row_lines = "\n".join("| " + " | ".join(str(c) for c in row) + " |" for row in rows)
+    row_lines = "\n".join("| " + " | ".join(_escape_md_cell(c) for c in row) + " |" for row in rows)
     return f"{header_line}\n{sep_line}\n{row_lines}\n"
+
+
+def _candidate_selection_section() -> list[str]:
+    """
+    The Markdown equivalent of dashboard.py's "Candidate selection" HTML
+    section - same source (core/market_data/candidate_selection_store.py),
+    same "why" fields, just table cells instead of <details>/<summary>
+    (Obsidian's renderer supports inline HTML like <br> inside a cell,
+    which is what makes a multi-headline list fit in one row).
+    """
+    selection = _latest_candidate_selection()
+    if selection is None:
+        return [
+            "## Candidate selection",
+            "",
+            "*No overnight candidate selection saved yet - see "
+            "`scripts/run_overnight_selection.sh`. Sessions fall back to selecting live in the meantime.*",
+            "",
+        ]
+
+    if selection.selected_detail:
+        selected_rows = [
+            [
+                f'{row["exchange"]}:{row["symbol"]}',
+                f'₹{row["last_close"]:,.2f}' if row.get("last_close") is not None else "-",
+                (
+                    f'{row["volatility_pct"] * 100:.2f}% vs {row.get("volatility_ceiling", 0) * 100:.2f}% '
+                    f'ceiling ({row.get("volatility_source", "")})'
+                    if row.get("volatility_pct") is not None
+                    else "-"
+                ),
+                (
+                    f'score {row["news_score"]}<br>' + "<br>".join(f"- {h}" for h in (row.get("headlines") or []))
+                    if row.get("news_score") is not None
+                    else "not news-checked"
+                ),
+            ]
+            for row in selection.selected_detail
+        ]
+    else:
+        # A file saved before this reasoning existed - fall back to the
+        # bare symbol list rather than an empty table (see dashboard.py's
+        # identical fallback for the same reason).
+        selected_rows = [[f"{i.exchange}:{i.symbol}", "-", "-", "no detail saved for this selection"] for i in selection.instruments]
+
+    excluded_reason_counts = Counter(row.get("reason") for row in selection.excluded_detail)
+    excluded_summary = (
+        ", ".join(f"{reason}: {count}" for reason, count in sorted(excluded_reason_counts.items(), key=lambda kv: -kv[1]))
+        or "none"
+    )
+
+    return [
+        "## Candidate selection",
+        "",
+        f"**Trading date:** {selection.trading_date} · **Computed:** {selection.computed_at} · "
+        f"**{len(selection.instruments)} selected, {len(selection.excluded_detail)} excluded**",
+        "",
+        _md_table(["Instrument", "Last close", "Volatility", "News"], selected_rows, "none selected"),
+        f"**Excluded ({len(selection.excluded_detail)})** - by reason: {excluded_summary}",
+        "",
+        "> [!note]- Full excluded list",
+        ">",
+        "> "
+        + _md_table(
+            ["Instrument", "Reason", "Detail"],
+            [
+                [
+                    f'{row["exchange"]}:{row["symbol"]}',
+                    f'{row.get("stage", "")}: {row.get("reason", "")}',
+                    ", ".join(
+                        bit
+                        for bit in [
+                            f'LTP ₹{row["ltp"]:,.2f}' if row.get("ltp") is not None else None,
+                            f'close ₹{row["last_close"]:,.2f}' if row.get("last_close") is not None else None,
+                            (
+                                f'vol {row["volatility_pct"] * 100:.2f}% vs {row.get("volatility_ceiling", 0) * 100:.2f}%'
+                                if row.get("volatility_pct") is not None
+                                else None
+                            ),
+                            f'news score {row["news_score"]}' if row.get("news_score") is not None else None,
+                        ]
+                        if bit is not None
+                    )
+                    or "-",
+                ]
+                for row in selection.excluded_detail
+            ],
+            "none excluded",
+        ).replace("\n", "\n> "),
+        "",
+    ]
 
 
 def render_markdown(session_dir: Path | None) -> str:
@@ -194,13 +296,17 @@ def render_markdown(session_dir: Path | None) -> str:
         "## Rejections by reason",
         "",
         _md_table(["Reason", "Count"], [[label, count] for label, count in rejection_items], "no rejections"),
+        *_candidate_selection_section(),
         f"## Universe ({len(all_symbols)} stocks, {len(traded)} traded this session)",
         "",
-        _md_table(
+        f"> [!note]- Show all {len(all_symbols)} stocks",
+        ">",
+        "> "
+        + _md_table(
             ["Symbol", "Status"],
             [[s, "traded this session" if s in traded else "not selected"] for s in all_symbols],
             "no universe loaded",
-        ),
+        ).replace("\n", "\n> "),
         "## Final positions",
         "",
         _md_table(

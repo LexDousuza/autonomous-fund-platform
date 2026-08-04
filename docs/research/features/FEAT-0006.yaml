@@ -1,0 +1,41 @@
+id: FEAT-0006
+feature: pcr
+hypothesis: >
+  NIFTY's aggregate put/call open-interest ratio predicts forward 5-day
+  index return (classic contrarian sentiment indicator: high PCR = "too
+  bearish" = subsequent rally).
+economic_mechanism: >
+  Extreme positioning (per open interest) is a contrarian sentiment
+  signal - crowded hedging/bearish positioning tends to unwind.
+question_2_redundancy_check: >
+  Distinct from iv_rv_ratio (FEAT-0005) and VRP (EXP-0001) - both of those
+  are price-derived (IV level); this is a pure positioning/flow measure
+  (open interest), a genuinely different data source within the same CSV.
+
+methodology: index-only time-series correlation
+dataset: data/processed/nse_index_options_iv_history.csv
+period: 2016-01-01 to 2026-07-24 (all listed expiries aggregated per date)
+parameters: {forward_horizon_days: 5}
+
+bootstrap_ci:
+  point_estimate: 0.02064738265554532
+  lower: -0.010347325709393304
+  upper: 0.05249244764656401
+  n_resamples: 2000
+p_value: 0.2945
+fdr_corrected: false
+n_observations: 2599
+
+git_commit: b32f494a980aa65e74b7e5753caa8dae3237e725
+data_snapshot_id: sha256:e5781844a58c6f81b1d594ca5d695a2f94ee8c79a373fc80a8c1dacd9badba6b
+python_version: "3.14.2"
+random_seed: 0
+
+date_opened: 2026-07-29
+date_decided: 2026-07-29
+decision: fail
+reason: >
+  Weak positive IC (0.021), CI straddles zero, p=0.2945 on a large sample
+  (2599 obs) - not significant despite plenty of statistical power to
+  find a smaller real effect if one existed. The classic contrarian-PCR
+  story doesn't show up at this horizon/aggregation on NIFTY.

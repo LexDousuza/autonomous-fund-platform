@@ -53,6 +53,12 @@ class FakeKiteClient:
     def positions(self, **kwargs):
         return self._record("positions", kwargs)
 
+    def instruments(self, exchange=None):
+        return self._record("instruments", {"exchange": exchange})
+
+    def order_margins(self, params):
+        return self._record("order_margins", {"params": params})
+
 
 def make_transport(client: FakeKiteClient | None = None) -> tuple[KiteHttpTransport, FakeKiteClient]:
     client = client or FakeKiteClient()
@@ -247,6 +253,31 @@ class KiteHttpTransportResilienceTests(unittest.TestCase):
             transport.place_order({"tradingsymbol": "RELIANCE"})
 
         self.assertEqual(len(client.calls), 1)  # no retry attempts for a write
+
+
+class KiteHttpTransportOptionsExtensionTests(unittest.TestCase):
+    def test_get_instruments_forwards_exchange(self) -> None:
+        transport, client = make_transport()
+        client.responses["instruments"] = [{"tradingsymbol": "NIFTY26AUG23000CE"}]
+
+        result = transport.get_instruments("NFO")
+
+        self.assertEqual(result, [{"tradingsymbol": "NIFTY26AUG23000CE"}])
+        name, kwargs = client.calls[0]
+        self.assertEqual(name, "instruments")
+        self.assertEqual(kwargs["exchange"], "NFO")
+
+    def test_get_order_margins_forwards_orders_list(self) -> None:
+        transport, client = make_transport()
+        client.responses["order_margins"] = [{"total": 12500.0}]
+        orders = [{"tradingsymbol": "NIFTY26AUG23000CE", "quantity": 50}]
+
+        result = transport.get_order_margins(orders)
+
+        self.assertEqual(result, [{"total": 12500.0}])
+        name, kwargs = client.calls[0]
+        self.assertEqual(name, "order_margins")
+        self.assertEqual(kwargs["params"], orders)
 
 
 if __name__ == "__main__":

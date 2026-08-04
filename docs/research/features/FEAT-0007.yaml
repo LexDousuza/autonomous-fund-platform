@@ -1,0 +1,36 @@
+id: FEAT-0007
+feature: iv_rv_ratio
+hypothesis: Same as FEAT-0005, applied to BANKNIFTY.
+economic_mechanism: Same as FEAT-0005.
+question_2_redundancy_check: Same as FEAT-0005.
+
+methodology: index-only time-series correlation
+dataset: data/processed/nse_index_options_iv_history.csv
+period: 2016-01-01 to 2026-07-24
+parameters: {iv_horizon_days: 7, iv_tolerance_days: 3, realized_vol_lookback_days: 20, forward_horizon_days: 5}
+
+bootstrap_ci:
+  point_estimate: 0.0427837009591373
+  lower: 0.007149156048827572
+  upper: 0.07839146123470486
+  n_resamples: 2000
+p_value: 0.057
+fdr_corrected: false
+n_observations: 2197
+
+git_commit: b32f494a980aa65e74b7e5753caa8dae3237e725
+data_snapshot_id: sha256:e5781844a58c6f81b1d594ca5d695a2f94ee8c79a373fc80a8c1dacd9badba6b
+python_version: "3.14.2"
+random_seed: 0
+
+date_opened: 2026-07-29
+date_decided: 2026-07-29
+decision: fail
+reason: >
+  Near-miss: CI [0.007, 0.078] clears zero, but p=0.057 misses the flat
+  0.05 bar by a hair (and misses FDR correction more decisively, since
+  it's judged alongside 7 other features). Directionally consistent with
+  FEAT-0005 (NIFTY) - same sign, smaller/less powerful sample (2197 vs
+  1994... actually more observations but noisier ratio for this index) -
+  worth revisiting with more history rather than treated as a clean null,
+  but doesn't pass as tested.

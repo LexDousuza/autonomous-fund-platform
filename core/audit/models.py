@@ -108,6 +108,12 @@ class SessionMetadata:
     allocation_plan: PortfolioAllocationPlan | None = None
     exit_policy: ExitPolicyConfig | None = None
     extra: dict[str, Any] = field(default_factory=dict)
+    # Set only for a multi-strategy portfolio session (see
+    # ExecutionOrchestrator.run_portfolio_session); None for every
+    # existing single-strategy session, which still just uses
+    # strategy_name above. Every individual AuditEvent already carries
+    # its own strategy_name, so this is for session-level display only.
+    strategy_names: list[str] | None = None
 
 
 @dataclass(slots=True)
@@ -160,3 +166,6 @@ class SessionSummary:
     final_session_risk_state: SessionRiskState | None
     succeeded: bool = True
     duplicate_orders_blocked: int = 0
+    # See SessionMetadata.strategy_names - same "None unless portfolio
+    # mode" convention.
+    strategy_names: list[str] | None = None

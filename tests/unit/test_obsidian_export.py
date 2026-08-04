@@ -5,7 +5,9 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+from apps.reporting import dashboard
 from apps.reporting.obsidian_export import (
     _format_timedelta,
     _market_status_line,
@@ -26,6 +28,93 @@ class RenderMarkdownTests(unittest.TestCase):
         md = render_markdown(None)
         self.assertTrue(md.startswith("---\n"))
         self.assertIn("status:", md)
+
+
+class CandidateSelectionSectionTests(unittest.TestCase):
+    """The Markdown mirror of dashboard.py's HTML "Candidate selection" section."""
+
+    def setUp(self) -> None:
+        tmp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp_dir.cleanup)
+        self.selection_dir = Path(tmp_dir.name)
+
+        self._original_dir = dashboard.CANDIDATE_SELECTION_DIR
+        dashboard.CANDIDATE_SELECTION_DIR = self.selection_dir
+        self.addCleanup(setattr, dashboard, "CANDIDATE_SELECTION_DIR", self._original_dir)
+
+    def test_no_selection_file_shows_fallback_message(self) -> None:
+        md = render_markdown(None)
+        self.assertIn("No overnight candidate selection saved yet", md)
+
+    def test_selected_ticker_shows_price_volatility_and_news_reasoning(self) -> None:
+        from core.market_data.candidate_selection_store import save_candidate_selection
+        from core.market_data.universe_models import Instrument
+
+        save_candidate_selection(
+            "2026-07-24",
+            [Instrument(symbol="RELIANCE", exchange="NSE")],
+            self.selection_dir,
+            selected_detail=[
+                {
+                    "symbol": "RELIANCE",
+                    "exchange": "NSE",
+                    "last_close": 1280.9,
+                    "volatility_pct": 0.018,
+                    "volatility_ceiling": 0.04,
+                    "volatility_source": "historical",
+                    "news_score": 4,
+                    "headlines": ["Reliance surges on record profit growth"],
+                }
+            ],
+            excluded_detail=[
+                {"symbol": "INFY", "exchange": "NSE", "stage": "prescreen", "reason": "unaffordable", "ltp": 50000.0}
+            ],
+        )
+
+        md = render_markdown(None)
+
+        self.assertIn("2026-07-24", md)
+        self.assertIn("NSE:RELIANCE", md)
+        self.assertIn("1,280.90", md)
+        self.assertIn("1.80%", md)
+        self.assertIn("Reliance surges on record profit growth", md)
+        self.assertIn("NSE:INFY", md)
+        self.assertIn("unaffordable", md)
+
+    def test_legacy_file_without_detail_falls_back_to_bare_symbol_list(self) -> None:
+        from core.market_data.candidate_selection_store import save_candidate_selection
+        from core.market_data.universe_models import Instrument
+
+        save_candidate_selection("2026-07-24", [Instrument(symbol="AAATECH", exchange="NSE")], self.selection_dir)
+
+        md = render_markdown(None)
+
+        self.assertIn("NSE:AAATECH", md)
+        self.assertIn("no detail saved for this selection", md)
+
+
+class MdTableEscapingTests(unittest.TestCase):
+    """
+    A literal "|" in cell content (common in real news headlines, e.g.
+    "X | Y" title formats) must not be read as a column separator -
+    would otherwise corrupt the table structure.
+    """
+
+    def test_pipe_in_cell_is_escaped_not_treated_as_a_column_separator(self) -> None:
+        from apps.reporting.obsidian_export import _md_table
+
+        table = _md_table(["A", "B"], [["Title | With Pipe", "ok"]], "empty")
+
+        lines = table.strip("\n").split("\n")
+        self.assertEqual(len(lines), 3)  # header, separator, exactly one data row
+        self.assertIn("Title \\| With Pipe", table)
+
+    def test_embedded_newline_is_collapsed_to_a_space(self) -> None:
+        from apps.reporting.obsidian_export import _md_table
+
+        table = _md_table(["A"], [["line one\nline two"]], "empty")
+
+        self.assertEqual(len(table.strip("\n").split("\n")), 3)
 
 
 class TextMeterTests(unittest.TestCase):

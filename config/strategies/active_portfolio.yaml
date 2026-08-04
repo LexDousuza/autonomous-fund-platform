@@ -1,0 +1,13 @@
+# Strategies currently active in the autonomous portfolio - a plain,
+# git-tracked deploy list, not a second human-approval ceremony (the human's
+# only approval gate is config/mandates/approved_capital.yaml's total). An
+# unlisted strategy simply gets no allocation; adding one here is an ordinary
+# code/config change, same trust level as any other.
+#
+# Ships with exactly the platform's pre-existing single-strategy default so
+# a fresh checkout behaves identically to before multi-strategy support
+# existed. Every tested cash-equity strategy has so far failed cleanly on
+# real out-of-sample data, and the options strategies have no forward/paper
+# track record yet - grow this list only as a strategy actually earns it.
+strategies:
+  - config/strategies/simple_breakout_momentum.yaml

@@ -1,0 +1,28 @@
+strategy:
+  name: ornstein_uhlenbeck_residual
+
+# Market-relative sibling of ornstein_uhlenbeck.yaml - fits the OU process
+# on each stock's residual return (after removing its beta-adjusted
+# co-movement with an equal-weighted market proxy - see
+# core/pricing/market_proxy.py) instead of the raw log-price. See
+# docs/strategy-specs/ornstein_uhlenbeck_residual.md for why: a single
+# stock's raw price has no real reason to have a stable equilibrium at
+# all, since it drifts with the whole market - the residual is a much
+# better-grounded candidate for genuine mean reversion.
+#
+# Requires params["market_index_feed"] to be injected at session-build
+# time (apps/backtester/run_backtest.py does this automatically for this
+# strategy name) - not set here, since it isn't a YAML-serializable value.
+params:
+  lookback_bars: 300
+  entry_z_threshold: 2.0
+  min_t_stat: 3.5
+  min_half_life_minutes: 15.0
+  max_half_life_minutes: 75.0
+  square_off_time: "15:10"
+  min_remaining_half_lives: 2.0
+  allow_multiple_entries: false
+
+# No candidate_profile - same reasoning as ornstein_uhlenbeck.yaml/
+# vwap_reversion.yaml: mean reversion wants the opposite of the
+# liquidity+uptrend screen the continuation strategies use.

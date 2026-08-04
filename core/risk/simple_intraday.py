@@ -1,10 +1,19 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from core.broker.base import OrderRequest
 from core.broker.groww_fees import estimate_groww_brokerage
 from core.risk.base import RiskContext, RiskDecision, RiskManager
+
+# ponytail: a hardcoded 3-strategy dict is fine for exactly the known
+# brokerage-clearance miscalibration today; promote to per-strategy YAML
+# config if a 4th strategy needs its own override.
+DEFAULT_MIN_PROFIT_TO_BROKERAGE_RATIO_OVERRIDES: dict[str, float] = {
+    "ornstein_uhlenbeck": 1.3,
+    "ornstein_uhlenbeck_residual": 1.3,
+    "gbm_momentum": 1.3,
+}
 
 
 @dataclass(slots=True)
@@ -12,6 +21,9 @@ class IntradayRiskSettings:
     max_capital_per_trade_pct_of_intraday_bucket: float = 0.25
     max_open_positions: int = 3
     min_profit_to_brokerage_ratio: float = 2.0
+    min_profit_to_brokerage_ratio_by_strategy: dict[str, float] = field(
+        default_factory=dict
+    )
 
 
 class SimpleIntradayRiskManager(RiskManager):
@@ -70,7 +82,10 @@ class SimpleIntradayRiskManager(RiskManager):
         if context.target_pct is not None:
             projected_profit = proposed_notional * (context.target_pct / 100)
             brokerage_cost = estimate_groww_brokerage(proposed_notional)
-            min_required_profit = self.settings.min_profit_to_brokerage_ratio * brokerage_cost
+            ratio = self.settings.min_profit_to_brokerage_ratio_by_strategy.get(
+                context.strategy_name, self.settings.min_profit_to_brokerage_ratio
+            )
+            min_required_profit = ratio * brokerage_cost
 
             if projected_profit <= min_required_profit:
                 return RiskDecision(

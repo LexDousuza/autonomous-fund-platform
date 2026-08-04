@@ -209,6 +209,38 @@ class GrowwMarketDataTransport:
             ),
         )
 
+    def get_option_chain(self, exchange: str, underlying: str, expiry_date: str) -> dict[str, Any]:
+        """
+        Fetch the option chain (with pre-computed Greeks/IV per strike)
+        for ``underlying`` on ``exchange`` expiring ``expiry_date``
+        (``"YYYY-MM-DD"``). Verified shape
+        (https://groww.in/trade-api/docs/python-sdk/live-data):
+        ``{"underlying_ltp": float, "strikes": {"<strike>": {"CE": {...},
+        "PE": {...}}, ...}}``, each side carrying ``trading_symbol``/
+        ``ltp``/``greeks`` (``delta``/``gamma``/``theta``/``vega``/
+        ``rho``/``iv``).
+        """
+        return self._call(
+            "get_option_chain",
+            lambda: self._client.get_option_chain(
+                exchange=exchange,
+                underlying=underlying,
+                expiry_date=expiry_date,
+                timeout=self._config.timeout_seconds,
+            ),
+        )
+
+    def get_expiries(self, exchange: str, underlying_symbol: str) -> dict[str, Any]:
+        """Fetch the available option expiry dates for ``underlying_symbol`` on ``exchange``."""
+        return self._call(
+            "get_expiries",
+            lambda: self._client.get_expiries(
+                exchange=exchange,
+                underlying_symbol=underlying_symbol,
+                timeout=self._config.timeout_seconds,
+            ),
+        )
+
     def list_all_instruments(self) -> list[dict[str, Any]]:
         """
         Fetch Groww's full instrument master: identifiers (trading_symbol,

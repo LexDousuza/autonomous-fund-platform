@@ -68,10 +68,12 @@ class KiteOrderRequest:
     building this model, since the platform doesn't expose either as a
     per-order concept yet.
 
-    ``tag`` carries ``OrderRequest.client_order_id`` through verbatim (see
-    ``core/execution/idempotency.py``) - Kite's own free-form order tag
-    field, capped at 20 alphanumeric characters by the API. Left ``None``
-    when the caller didn't set one.
+    ``tag`` carries ``OrderRequest.algo_id`` (SEBI's regulatory algo tag)
+    when set, falling back to ``client_order_id`` (this platform's own
+    idempotency key, see ``core/execution/idempotency.py``) otherwise -
+    see ``KiteBrokerAdapter._build_kite_order_request``. Kite's own
+    free-form order tag field, capped at 20 alphanumeric characters by
+    the API. Left ``None`` when the caller didn't set either.
     """
 
     exchange: str

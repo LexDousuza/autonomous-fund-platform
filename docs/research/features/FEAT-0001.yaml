@@ -1,0 +1,51 @@
+id: FEAT-0001
+feature: momentum_return
+hypothesis: >
+  A stock's trailing 20-day return predicts its own forward 5-day return
+  (continuation, not reversal).
+economic_mechanism: >
+  Slow information diffusion / institutional execution spreading a real
+  move over multiple days (behavioral underreaction) - see
+  core/analytics/features.py's momentum_return docstring.
+question_2_redundancy_check: >
+  Distinct from the existing momentum.yaml/gbm_momentum strategies (both
+  confirmed losers/inert - EXP-0007, EXP-0016/0020): those are entry
+  RULES tested for tradeable PnL; this is the raw feature tested for
+  predictive information content (IC), independent of any specific entry
+  mechanic or exit policy.
+
+methodology: cross-sectional daily IC, 122-symbol universe (real NSE corporate-actions table now used - 6 symbols price-adjusted, 5 excluded for unadjustable actions; see core/market_data/corporate_actions.py, docs/research/data/universe_expansion_2026-07-30.md)
+dataset: data/processed/nse_daily_12mo.csv
+period: 2025-07 to 2026-07 (~12 months, ~221 valid trading days)
+parameters: {lookback_days: 20, forward_horizon_days: 5}
+
+bootstrap_ci:
+  point_estimate: -0.0031816304221228106
+  lower: -0.021307960208026503
+  upper: 0.014232454740455907
+  n_resamples: 2000
+p_value: 0.7815
+fdr_corrected: false   # Benjamini-Hochberg across all 8 Phase A features, fdr=0.05
+n_observations: 221
+
+git_commit: b32f494a980aa65e74b7e5753caa8dae3237e725
+data_snapshot_id: null   # not hashed for this daily file - see docs/research/experiments/README.md's rationale
+python_version: "3.14.2"
+random_seed: 0
+
+date_opened: 2026-07-29
+date_decided: 2026-07-30
+decision: fail
+reason: >
+  Three data states now on record for this feature, each an honest
+  correction of the last: (1) 25 symbols, unadjusted: IC=+0.044, p=0.0195
+  - raw-significant, failed only once FDR-corrected. (2) 126 symbols
+  (SKFINDIA excluded by a crude >30%-jump heuristic), unadjusted
+  otherwise: IC=-0.0012, p=0.922 - collapsed to noise. (3) 122 symbols,
+  real NSE corporate-actions table applied (6 more symbols price-
+  adjusted, 5 excluded via actual filed Rights/Demerger/Merger events -
+  the heuristic in (2) had missed 4 of them): IC=-0.0032, p=0.7815 -
+  same conclusion as (2), still clearly null. The (1)->(2) jump was the
+  important lesson (small-sample noise); the (2)->(3) jump barely moved
+  this particular feature, but did meaningfully move atr_pct (FEAT-0004) -
+  see that entry.

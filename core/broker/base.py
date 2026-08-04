@@ -23,6 +23,32 @@ class ProductType(str, Enum):
     DELIVERY = "DELIVERY"
 
 
+class OptionType(str, Enum):
+    """
+    NSE options have been European-style (no early exercise) since
+    SEBI's 2019 circular - ``core/pricing/black_scholes.py`` relies on
+    that. Lives here, not in ``core/pricing``, since it's shared trading
+    vocabulary every layer (broker, strategy, pricing) imports from.
+    """
+
+    CALL = "CALL"
+    PUT = "PUT"
+
+
+class PositionEffect(str, Enum):
+    """
+    Required (not optional) on every options order/signal: a SELL is
+    ambiguous for an option in a way it never is for a cash-equity share
+    - closing a long call (risk-reducing) and opening a naked short call
+    (risk-creating, uncapped) are both "SELL", and nothing else in the
+    order model disambiguates them. Not meaningful for cash-equity
+    orders, which stay ``None``.
+    """
+
+    OPEN = "OPEN"
+    CLOSE = "CLOSE"
+
+
 class OrderStatus(str, Enum):
     PENDING = "PENDING"
     OPEN = "OPEN"
@@ -40,6 +66,27 @@ class OrderRequest:
     Callers that don't set it get today's behavior unchanged -
     ``PaperBroker`` always creates a new fill, and ``GrowwBrokerAdapter``
     lets Groww generate its own reference id.
+
+    ``algo_id`` is the broker/exchange-issued algo-strategy identifier
+    SEBI's retail algo-trading framework requires on every order an
+    algorithm places (distinct from ``client_order_id``, which is this
+    platform's own internal idempotency key, not a regulatory tag) - see
+    ``apps/live_trader/config.py``'s ``LIVE_BROKER_ALGO_ID``. ``None`` for
+    a paper session, which places no real exchange order. When set,
+    ``KiteBrokerAdapter``/``GrowwBrokerAdapter`` prefer it over
+    ``client_order_id`` for whichever single wire field their broker
+    reuses for both concerns (Kite's ``tag``, Groww's
+    ``order_reference_id``) - the compliance tag wins when both would
+    otherwise compete for one field.
+
+    ``strike``/``expiry``/``option_type``/``lot_size``/``position_effect``
+    are all ``None``/``1`` for a plain cash-equity order (today's only
+    kind) - every existing call site is byte-identical. For an options
+    order, ``option_type`` set is the signal that the others apply;
+    ``position_effect`` is then required in practice (see
+    ``PositionEffect``'s docstring), though not enforced by the type
+    system to avoid a runtime check every cash-equity call site would
+    have to satisfy for a field that doesn't apply to it.
     """
 
     symbol: str
@@ -53,6 +100,12 @@ class OrderRequest:
     strategy_name: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
     client_order_id: str | None = None
+    algo_id: str | None = None
+    strike: float | None = None
+    expiry: str | None = None
+    option_type: OptionType | None = None
+    lot_size: int = 1
+    position_effect: PositionEffect | None = None
 
 
 @dataclass(slots=True)
@@ -70,10 +123,22 @@ class Order:
     updated_at: datetime | None = None
     average_price: float | None = None
     raw: dict[str, Any] = field(default_factory=dict)
+    strike: float | None = None
+    expiry: str | None = None
+    option_type: OptionType | None = None
+    lot_size: int = 1
+    position_effect: PositionEffect | None = None
 
 
 @dataclass(slots=True)
 class Position:
+    """
+    ``quantity`` is signed for an options position: positive is long,
+    negative is a naked short (see ``PositionEffect``) - mirrors how
+    ``core/execution/kill_switch.py``'s ``_build_flatten_request``
+    already reads this field for any product type.
+    """
+
     symbol: str
     exchange: str
     quantity: int
@@ -82,6 +147,10 @@ class Position:
     last_price: float | None = None
     unrealized_pnl: float | None = None
     realized_pnl: float | None = None
+    strike: float | None = None
+    expiry: str | None = None
+    option_type: OptionType | None = None
+    lot_size: int = 1
 
 
 class Broker(ABC):

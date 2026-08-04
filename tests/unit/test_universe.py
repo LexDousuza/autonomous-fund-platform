@@ -45,13 +45,13 @@ class InstrumentUniverseLoaderTests(unittest.TestCase):
         universe = load_instrument_universe(UNIVERSE_PATH)
 
         self.assertEqual(universe.universe_name, "india_cash_v1")
-        self.assertEqual(len(universe.instruments), 10)
+        self.assertEqual(len(universe.instruments), 2395)
 
     def test_first_instrument_fields_are_parsed(self) -> None:
         universe = load_instrument_universe(UNIVERSE_PATH)
         first = universe.instruments[0]
 
-        self.assertEqual(first.symbol, "RELIANCE")
+        self.assertEqual(first.symbol, "20MICRONS")
         self.assertEqual(first.exchange, "NSE")
         self.assertEqual(first.segment, "CASH")
         self.assertTrue(first.enabled)
@@ -210,6 +210,39 @@ class TradingUniverseSelectorTests(unittest.TestCase):
         via_selector = self.selector.select(self.universe, criteria)
 
         self.assertEqual(via_function, via_selector)
+
+
+INDEX_UNIVERSE_PATH = "config/instruments/india_index_universe.yaml"
+
+
+class IndexInstrumentUniverseTests(unittest.TestCase):
+    """
+    NIFTY/BANKNIFTY as plain Instrument rows in their own universe file -
+    see CandidateProfile.fixed_universe_segment's docstring for why
+    they're not in india_cash_universe.yaml.
+    """
+
+    def test_loads_both_index_instruments(self) -> None:
+        universe = load_instrument_universe(INDEX_UNIVERSE_PATH)
+
+        self.assertEqual(universe.universe_name, "india_index_v1")
+        self.assertEqual({i.symbol for i in universe.instruments}, {"NIFTY", "BANKNIFTY"})
+
+    def test_both_instruments_are_index_segment_and_tagged(self) -> None:
+        universe = load_instrument_universe(INDEX_UNIVERSE_PATH)
+
+        for instrument in universe.instruments:
+            self.assertEqual(instrument.exchange, "NSE")
+            self.assertEqual(instrument.segment, "INDEX")
+            self.assertIn("index_options", instrument.tags)
+            self.assertTrue(instrument.enabled)
+
+    def test_selectable_by_index_segment(self) -> None:
+        universe = load_instrument_universe(INDEX_UNIVERSE_PATH)
+
+        selected = TradingUniverseSelector().select(universe, UniverseSelectionCriteria(segment="INDEX"))
+
+        self.assertEqual({i.symbol for i in selected}, {"NIFTY", "BANKNIFTY"})
 
 
 if __name__ == "__main__":

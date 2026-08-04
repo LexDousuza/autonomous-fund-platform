@@ -26,6 +26,7 @@ trading hot path (none of ``apps/paper_trader``, ``apps/live_trader``, or
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
 
 from core.market_data.universe_models import Instrument
 from core.strategy.base import MarketBar
@@ -174,5 +175,84 @@ def screen_by_liquidity_and_trend(
             ScreeningExclusion(instrument.symbol, instrument.exchange, "max_symbols_cap")
             for instrument in overflow
         )
+
+    return result
+
+
+@dataclass(slots=True)
+class RelativeVolumeScreeningCriteria:
+    """
+    "Stocks in play" screen: flags a symbol whose most recently completed
+    trading day's total volume was unusually high relative to its OWN
+    trailing average - a proxy for "something happened recently" (news,
+    a catalyst), distinct from ``LiquidityTrendScreeningCriteria``'s
+    question of whether a symbol is generally liquid. Research backing
+    (see the practicality-audit follow-up conversation): the one academic
+    result with real validated edge on intraday momentum/breakout
+    restricted to "Stocks in Play" (abnormal same-day volume), not a
+    static always-liquid universe.
+
+    Data-grounded default: on this platform's own ~6-month dev-period
+    sample, the distribution of (a day's volume / trailing-10-day average
+    volume) had a median of ~0.92x and a 90th percentile of ~1.66x -
+    ``1.5`` sits just below that 90th percentile, selecting roughly the
+    top ~10-15% most active recent days per symbol without being so
+    strict signals almost never fire (as tighter thresholds did in the
+    earlier parameter sweep on this same platform).
+    """
+
+    relative_volume_multiplier: float = 1.5
+    trailing_days: int = 10
+
+
+@dataclass(slots=True)
+class RelativeVolumeScreeningResult:
+    selected: list[Instrument] = field(default_factory=list)
+    excluded: list[ScreeningExclusion] = field(default_factory=list)
+
+
+def screen_by_relative_volume(
+    instruments: list[Instrument],
+    price_history: dict[str, list[MarketBar]],
+    criteria: RelativeVolumeScreeningCriteria,
+) -> RelativeVolumeScreeningResult:
+    """
+    Groups ``price_history`` into calendar days internally and compares
+    the most recently completed day's total volume against the average
+    of the ``criteria.trailing_days`` days before that. Needs at least
+    ``trailing_days + 1`` distinct days (the "yesterday" being judged,
+    plus a full baseline window) - fewer is excluded as
+    ``insufficient_history``, matching
+    ``screen_by_liquidity_and_trend``'s identical convention.
+    """
+    result = RelativeVolumeScreeningResult()
+
+    for instrument in instruments:
+        bars = price_history.get(instrument.symbol) or []
+        volume_by_day: dict[date, float] = {}
+        for bar in bars:
+            day = bar.timestamp.date()
+            volume_by_day[day] = volume_by_day.get(day, 0.0) + bar.volume
+
+        days = sorted(volume_by_day)
+        if len(days) < criteria.trailing_days + 1:
+            result.excluded.append(
+                ScreeningExclusion(instrument.symbol, instrument.exchange, "insufficient_history")
+            )
+            continue
+
+        most_recent_day = days[-1]
+        baseline_days = days[-(criteria.trailing_days + 1) : -1]
+        baseline_avg_volume = sum(volume_by_day[d] for d in baseline_days) / len(baseline_days)
+
+        if baseline_avg_volume <= 0 or (
+            volume_by_day[most_recent_day] < criteria.relative_volume_multiplier * baseline_avg_volume
+        ):
+            result.excluded.append(
+                ScreeningExclusion(instrument.symbol, instrument.exchange, "not_in_play")
+            )
+            continue
+
+        result.selected.append(instrument)
 
     return result

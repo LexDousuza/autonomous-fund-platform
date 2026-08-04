@@ -166,5 +166,66 @@ class UpdateDailyMandateFieldsTests(unittest.TestCase):
         self.assertEqual(self.path.read_text(), original)
 
 
+class KillSwitchMandateFieldsTests(unittest.TestCase):
+    """
+    max_consecutive_broker_errors/max_consecutive_order_rejections -
+    replaces the dead config/risk/default_risk.yaml (never loaded by
+    anything) as the real, actually-parsed source for these thresholds.
+    """
+
+    def _write(self, tmp_dir: str, risk_limits_extra: str = "") -> Path:
+        path = Path(tmp_dir) / "mandate.yaml"
+        path.write_text(
+            'trading_date: "2026-07-07"\n\n'
+            "buckets:\n  reserve_bucket: 40000\n  intraday_bucket: 60000\n\n"
+            "risk_limits:\n  max_daily_loss: 2500\n  max_trades_per_day: 6\n"
+            f"{risk_limits_extra}"
+            'execution_mode: "paper"\n',
+            encoding="utf-8",
+        )
+        return path
+
+    def test_missing_fields_default_to_none_backward_compatible(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            mandate = load_daily_mandate(self._write(tmp_dir))
+
+        self.assertIsNone(mandate.risk_limits.max_consecutive_broker_errors)
+        self.assertIsNone(mandate.risk_limits.max_consecutive_order_rejections)
+
+    def test_present_fields_are_parsed_as_ints(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            mandate = load_daily_mandate(
+                self._write(
+                    tmp_dir,
+                    "  max_consecutive_broker_errors: 3\n  max_consecutive_order_rejections: 5\n",
+                )
+            )
+
+        self.assertEqual(mandate.risk_limits.max_consecutive_broker_errors, 3)
+        self.assertEqual(mandate.risk_limits.max_consecutive_order_rejections, 5)
+
+    def test_sample_mandate_file_declares_real_thresholds(self) -> None:
+        # The checked-in example must actually exercise the feature, not
+        # leave it silently inert - see sample_mandate.yaml's comment.
+        mandate = load_daily_mandate("config/mandates/sample_mandate.yaml")
+
+        self.assertIsNotNone(mandate.risk_limits.max_consecutive_broker_errors)
+        self.assertIsNotNone(mandate.risk_limits.max_consecutive_order_rejections)
+
+    def test_updates_kill_switch_fields_via_update_daily_mandate_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            path = self._write(
+                tmp_dir, "  max_consecutive_broker_errors: 3\n  max_consecutive_order_rejections: 5\n"
+            )
+            update_daily_mandate_fields(
+                path, {"max_consecutive_broker_errors": 10, "max_consecutive_order_rejections": 20}
+            )
+
+            mandate = load_daily_mandate(path)
+
+        self.assertEqual(mandate.risk_limits.max_consecutive_broker_errors, 10)
+        self.assertEqual(mandate.risk_limits.max_consecutive_order_rejections, 20)
+
+
 if __name__ == "__main__":
     unittest.main()

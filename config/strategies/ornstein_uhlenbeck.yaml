@@ -1,0 +1,32 @@
+strategy:
+  name: ornstein_uhlenbeck
+
+# Statistically fit mean-reversion (see core/pricing/ornstein_uhlenbeck.py
+# and this strategy's own docstring) instead of vwap_reversion's fixed
+# "% below session VWAP" heuristic - a rolling per-symbol Ornstein-
+# Uhlenbeck fit each bar, trading z-score deviation from the model's own
+# fitted equilibrium. First of the "test one equation at a time" research
+# strategies - see docs/strategy-specs/ornstein_uhlenbeck.md.
+#
+# Tuned for 1-minute bars (data/processed/nse_1min_recent.csv) - the
+# solo backtest against 5-minute bars showed every single trade getting
+# cut off by end-of-day square-off before reverting, never a stop-loss or
+# target. lookback_bars=300 (~5 real-world hours at 1-minute bars, same
+# window the original 5-minute-bar version used) trades finer-grained
+# data for more statistical power without shrinking the real-world
+# window being fit.
+params:
+  lookback_bars: 300
+  entry_z_threshold: 2.0
+  min_t_stat: 3.5
+  min_half_life_minutes: 15.0
+  max_half_life_minutes: 75.0
+  square_off_time: "15:10"
+  min_remaining_half_lives: 2.0
+  allow_multiple_entries: false
+
+# No candidate_profile, same reasoning as vwap_reversion.yaml: mean
+# reversion doesn't want the liquidity+uptrend screen the continuation
+# strategies (momentum/ma_crossover/pullback) use - it's looking for the
+# opposite condition (an extended deviation), which that screen would
+# work against, not with.

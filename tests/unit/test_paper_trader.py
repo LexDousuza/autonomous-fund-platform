@@ -20,11 +20,17 @@ import unittest
 from contextlib import redirect_stdout
 from unittest.mock import patch
 
-from apps.live_trader.config import MissingGrowwCredentialsError
+from kiteconnect import KiteConnect
+
+from apps.live_trader.config import MissingGrowwCredentialsError, MissingKiteCredentialsError
 from apps.paper_trader.config import PaperTraderConfig, load_paper_trader_config_from_env
 from apps.paper_trader.main import build_paper_session, run_paper_session
 from core.audit.sink import NullAuditSink
+from core.broker.estimated_margin import EstimatedSpanMarginCalculator
 from core.broker.paper import PaperBroker
+from core.market_data.candidate_profile import CandidateProfile
+from core.market_data.kite_option_chain import KiteOptionChainProvider
+from core.risk.options_margin import OptionsMarginRiskManager
 
 DEFAULT_CONFIG = PaperTraderConfig(
     market_data_provider="memory",
@@ -83,7 +89,7 @@ class BuildPaperSessionDefaultTests(unittest.TestCase):
 
         self.assertIsInstance(ctx.broker, PaperBroker)
         self.assertEqual(ctx.mandate.risk_appetite, "moderate")
-        self.assertEqual(len(ctx.candidate_instruments), 8)  # full NSE universe
+        self.assertEqual(len(ctx.candidate_instruments), 2393)  # full NSE universe
 
     def test_bucket_is_a_subset_of_candidates_and_capped_by_max_open_positions(self) -> None:
         ctx = build_paper_session(config=DEFAULT_CONFIG)
@@ -91,6 +97,28 @@ class BuildPaperSessionDefaultTests(unittest.TestCase):
         candidate_symbols = {i.symbol for i in ctx.candidate_instruments}
         self.assertTrue(set(ctx.session_symbols).issubset(candidate_symbols))
         self.assertLessEqual(len(ctx.session_symbols), ctx.allocation_plan.max_open_positions)
+
+
+class PaperMarginSimulationTests(unittest.TestCase):
+    """
+    A paper session's naked-write-opens must be gated the same way a
+    real Kite/Groww live session would be - see EstimatedSpanMarginCalculator's
+    docstring for why this can't just be left unwired the way it was
+    before.
+    """
+
+    def test_risk_manager_is_margin_aware_with_estimated_calculator(self) -> None:
+        ctx = build_paper_session(config=DEFAULT_CONFIG)
+
+        risk_manager = ctx.orchestrator.risk_manager
+        self.assertIsInstance(risk_manager, OptionsMarginRiskManager)
+        self.assertIsInstance(risk_manager.margin_calculator, EstimatedSpanMarginCalculator)
+
+    def test_available_margin_is_set_from_intraday_capital(self) -> None:
+        ctx = build_paper_session(config=DEFAULT_CONFIG)
+
+        self.assertEqual(ctx.session_config.available_margin, ctx.allocation_plan.intraday_capital)
+        self.assertIsNotNone(ctx.session_config.available_margin)
 
 
 class CapitalOverrideTests(unittest.TestCase):
@@ -201,6 +229,104 @@ class GrowwProviderCredentialTests(unittest.TestCase):
             build_paper_session(config=config)
 
 
+class StrategyConfigLoadingTests(unittest.TestCase):
+    """
+    PaperTraderConfig.strategy_config_path replaces the previously
+    hardcoded strategy_name="simple_breakout_momentum"/strategy_params={} -
+    the default path must reproduce that exactly.
+    """
+
+    def test_default_config_reproduces_previously_hardcoded_strategy(self) -> None:
+        ctx = build_paper_session(config=DEFAULT_CONFIG)
+
+        self.assertEqual(ctx.session_config.strategy_name, "simple_breakout_momentum")
+        self.assertEqual(
+            ctx.session_config.strategy_params,
+            {
+                "breakout_lookback_bars": 5,
+                "min_volume_multiplier": 1.0,
+                "allow_multiple_entries": False,
+                "quantity_per_trade": 5,
+            },
+        )
+
+
+class KiteProviderTests(unittest.TestCase):
+    KITE_ENV = {"KITE_API_KEY": "test-kite-key", "KITE_ACCESS_TOKEN": "test-kite-token"}
+
+    @patch.dict(os.environ, {}, clear=False)
+    def test_kite_provider_without_credentials_raises(self) -> None:
+        for var in ("KITE_API_KEY", "KITE_ACCESS_TOKEN"):
+            os.environ.pop(var, None)
+
+        config = PaperTraderConfig(
+            market_data_provider="kite",
+            intraday_capital_override=None,
+            risk_appetite_override=None,
+            historical_from_date="2026-01-01",
+            historical_to_date="2026-01-31",
+            historical_interval="1d",
+        )
+
+        with self.assertRaises(MissingKiteCredentialsError):
+            build_paper_session(config=config)
+
+    @patch.dict(os.environ, KITE_ENV)
+    @patch.object(KiteConnect, "historical_data", return_value=[])
+    @patch.object(
+        KiteConnect,
+        "instruments",
+        return_value=[
+            {"tradingsymbol": "NIFTY", "instrument_token": 111, "exchange": "NSE"},
+            {"tradingsymbol": "BANKNIFTY", "instrument_token": 112, "exchange": "NSE"},
+        ],
+    )
+    @patch.object(KiteConnect, "profile", return_value={"user_id": "TEST"})
+    def test_kite_credentials_inject_option_chain_provider(
+        self, mock_profile, mock_instruments, mock_historical_data
+    ) -> None:
+        # The real KiteMarketDataTransport is exercised end to end here
+        # (not mocked away) since market_data_provider="kite" also drives
+        # the candidate historical-bars fetch - mocked at the kiteconnect
+        # SDK level instead, same reasoning as test_live_trader.py's
+        # equivalent Kite tests.
+        config = PaperTraderConfig(
+            market_data_provider="kite",
+            intraday_capital_override=None,
+            risk_appetite_override=None,
+            historical_from_date="2026-01-01",
+            historical_to_date="2026-01-31",
+            historical_interval="1d",
+        )
+        with patch(
+            "apps.paper_trader.main.load_strategy_config",
+            return_value=("index_options_test_strategy", {}, CandidateProfile(fixed_universe_segment="INDEX")),
+        ):
+            ctx = build_paper_session(config=config)
+
+        self.assertIsInstance(
+            ctx.session_config.strategy_params["option_chain_provider"], KiteOptionChainProvider
+        )
+
+
+class FixedUniverseSegmentBypassTests(unittest.TestCase):
+    """
+    CandidateProfile.fixed_universe_segment must select the fixed index
+    universe and skip bucket selection entirely - see that field's
+    docstring.
+    """
+
+    def test_selects_index_instruments_and_skips_bucket_selection(self) -> None:
+        with patch(
+            "apps.paper_trader.main.load_strategy_config",
+            return_value=("index_options_test_strategy", {}, CandidateProfile(fixed_universe_segment="INDEX")),
+        ):
+            ctx = build_paper_session(config=DEFAULT_CONFIG)
+
+        self.assertEqual(set(ctx.session_symbols), {"NIFTY", "BANKNIFTY"})
+        self.assertEqual(ctx.bucket_result.excluded, [])
+
+
 class RunPaperSessionBannerTests(unittest.TestCase):
     def test_banner_and_summary_contain_key_fields(self) -> None:
         with patch("apps.paper_trader.main.load_paper_trader_config_from_env", return_value=DEFAULT_CONFIG):
@@ -212,7 +338,7 @@ class RunPaperSessionBannerTests(unittest.TestCase):
         self.assertIn("=== PAPER TRADER START ===", output)
         self.assertIn("Risk appetite: moderate", output)
         self.assertIn("=== BUCKET SELECTION ===", output)
-        self.assertIn("Candidates considered (8)", output)
+        self.assertIn("Candidates considered (2393)", output)
         self.assertIn("=== SESSION SUMMARY ===", output)
         self.assertIn("=== PAPER TRADER END ===", output)
 

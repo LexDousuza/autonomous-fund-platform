@@ -1,0 +1,43 @@
+id: FEAT-0003
+feature: relative_volume
+hypothesis: >
+  Unusually high trading volume (vs. trailing 20-day average) predicts
+  forward 5-day return.
+economic_mechanism: >
+  Elevated participation as a proxy for new information reaching the
+  market.
+question_2_redundancy_check: >
+  Already used qualitatively as a pre-filter by relative_volume_pullback
+  (EXP-0011, confirmed loser) - tested here directly as its own predictor,
+  independent of that strategy's specific pullback entry mechanic.
+
+methodology: cross-sectional daily IC, 122-symbol universe (real NSE corporate-actions table applied - see FEAT-0001)
+dataset: data/processed/nse_daily_12mo.csv
+period: 2025-07 to 2026-07 (~12 months)
+parameters: {lookback_days: 20, forward_horizon_days: 5}
+
+bootstrap_ci:
+  point_estimate: 0.0013027177213707443
+  lower: -0.011544682940891426
+  upper: 0.014317021537052442
+  n_resamples: 2000
+p_value: 0.87
+fdr_corrected: false
+n_observations: 221
+
+git_commit: b32f494a980aa65e74b7e5753caa8dae3237e725
+data_snapshot_id: null
+python_version: "3.14.2"
+random_seed: 0
+
+date_opened: 2026-07-29
+date_decided: 2026-07-30
+decision: fail
+reason: >
+  Consistently the clearest null in the batch across all 3 data states
+  (25 unadjusted -> 126 crude-exclusion -> 122 real corporate-actions
+  table): IC essentially zero throughout (-0.0009 -> 0.0023 -> 0.0013),
+  p never close to significant (0.9495 -> 0.7815 -> 0.87). Consistent
+  with EXP-0011's separate finding that relative-volume-filtered pullback
+  entries were a confirmed loser - the raw feature carries no information
+  content at any sample size or data-quality state tested.

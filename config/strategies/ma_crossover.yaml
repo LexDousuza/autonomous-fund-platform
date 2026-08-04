@@ -1,0 +1,14 @@
+strategy:
+  name: ma_crossover
+
+params:
+  fast_bars: 5
+  slow_bars: 20
+  allow_multiple_entries: false
+
+# Same reasoning as momentum/pullback - see core/market_data/candidate_profile.py.
+candidate_profile:
+  require_liquidity_and_uptrend: true
+  min_avg_volume: 50000
+  trend_lookback_bars: 20
+  rank_by_volatility: true

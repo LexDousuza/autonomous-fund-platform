@@ -1,0 +1,70 @@
+id: EXP-0022
+
+hypothesis: >
+  vertical_credit_spread (NIFTY, PUT side) converts the measured VRP
+  (EXP-0001) into real, risk-defined strategy PnL at a 15-day max hold -
+  the second of the two hold lengths validation_audit_phase2.md's
+  2026-07-31 exploratory follow-up flagged as best (NIFTY point estimate:
+  1.010 @5d -> 1.112 @10d -> 1.086 @15d, easing slightly but still >1).
+
+economic_mechanism: >
+  Same as EXP-0021 (10-day hold, same symbol): tests whether an even
+  longer hold captures more of an option's final-days theta decay than
+  10 days already does, or whether 10 days was closer to the peak (the
+  single-window exploratory data suggested a peak near 10d, not 15d).
+
+dataset: data/processed/nse_index_options_iv_history.csv
+universe: [NIFTY]
+period:
+  train_or_dev: "2016-01-01 to 2023-12-31 (166 trades): point=1.3941, CI=[0.9874,2.0242], p=0.131 - fails"
+  holdout: "2024-01-01 to 2026-07-24 (67 trades): point=1.0857, CI=[0.6243,1.8467], p=0.7955 - fails"
+
+parameters:
+  option_type: PUT
+  expiry_horizon_days: 7
+  short_leg_target_delta: 0.25
+  wing_offset_strikes: 2
+  iv_rv_ratio_threshold: 1.2
+  min_net_credit_pct_of_width: 10.0
+  historical_vol_lookback_bars: 20
+  max_holding_days: 15
+  capital: 5000000.0
+  per_leg_capital: 10000.0
+  lot_size: 75
+  slippage_bps: 5.0
+
+bootstrap_ci:
+  point_estimate: 1.085745561581987   # profit factor; 67 closed leg round-trips, HOLDOUT window
+  lower: 0.6243387323775024
+  upper: 1.8466615116107685
+  n_resamples: 2000
+p_value: 0.7955
+fdr_corrected: false   # not run alongside a broader FDR batch this round - see reason
+kill_criteria_result:
+  ci_lower_bound_above_1: false
+  fdr_p_under_threshold: false
+  holdout_drop_under_25pct: true   # holdout PF (1.086) vs dev PF (1.394): 22.1% drop, under 25% but close
+  walk_forward_sign_consistent: false   # 0/8 walk-forward years reach significance; 7/8 point estimates >1 (up to 1.447 in 2023)
+
+git_commit: 7507cb254900f4f6106823bc6b02c06308d77c51
+config_version: config/strategies/vertical_credit_spread.yaml
+data_snapshot_id: sha256:e5781844a58c6f81b1d594ca5d695a2f94ee8c79a373fc80a8c1dacd9badba6b
+python_version: "3.14.2"
+random_seed: 0
+
+date_opened: 2026-08-03
+date_decided: 2026-08-03
+decision: fail
+reason: >
+  docs/research/validation_audit_phase2_longer_hold.md: full Phase 2
+  battery at a 15-day max hold. Still zero of 12 checks reach significance.
+  The DEV window's CI lower bound (0.987) is the single closest miss across
+  every hold length tested for either symbol (5d/10d/15d, NIFTY/BANKNIFTY)
+  - but it's in-sample only; the out-of-sample HOLDOUT CI lower stays at
+  0.624, and 0/8 walk-forward years pass. Point estimate rose vs. 5d
+  (dev 1.162 -> 1.394) but sample size fell faster (dev trades: 317 -> 166,
+  smaller than even the 10-day window's 214), so the CI widened rather than
+  tightened despite the higher point estimate. No hold length tested so far
+  (5d, 10d, 15d) converts NIFTY credit_spread into a validated result.
+
+  Should not proceed to Tier B as currently designed.

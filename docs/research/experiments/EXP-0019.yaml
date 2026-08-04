@@ -1,0 +1,35 @@
+id: EXP-0019
+hypothesis: Broad-basket OU residual (1-min bars) mean-reverts.
+economic_mechanism: >
+  Same pair-residual mechanism as EXP-0018, different bar interval/config
+  (1-minute). See docs/strategy-specs/ornstein_uhlenbeck_residual.md.
+
+dataset: data/processed/nse_1min_recent.csv
+period: {train_or_dev: "nse_1min_recent.csv", holdout: null}
+parameters: {lookback_bars: 300, entry_z_threshold: 2.0, min_t_stat: 3.5}
+
+bootstrap_ci: {point_estimate: 0.0, lower: 0.0, upper: 0.0, n_resamples: 2000}
+p_value: 0.248
+fdr_corrected: false
+kill_criteria_result: {ci_lower_bound_above_1: false, fdr_p_under_threshold: false, holdout_drop_under_25pct: null, walk_forward_sign_consistent: null}
+
+git_commit: b32f494a980aa65e74b7e5753caa8dae3237e725
+config_version: config/strategies/ornstein_uhlenbeck_residual.yaml
+data_snapshot_id: sha256:9740088847bc771be51ada7a25865bad242a18b7e93cc997e7bd739f511e3363
+python_version: "3.14.2"
+random_seed: 0
+
+date_opened: 2026-07-28
+date_decided: 2026-08-05
+decision: archived
+reason: >
+  RE-AUDITED after the risk-manager fix (see
+  docs/research/ou_gbm_risk_manager_fix_reaudit.md) - a REAL statistical
+  verdict was possible for the first time, independently traced (not by
+  analogy). Over the full nse_1min_recent.csv window, the fix unblocks 3
+  trades, all losers (profit_factor point estimate 0.0, gross_profit=0).
+  90% bootstrap CI [0.0, 0.0], permutation p=0.248 (not significant, n=3
+  too small either way). Verdict: NOT a validated edge; doesn't clear the
+  bar for "confirmed loser" either (p>0.05, doesn't survive FDR) - a
+  small, negative sample. Risk-manager blocker resolved; this config
+  shows no edge on this evidence. Archived.

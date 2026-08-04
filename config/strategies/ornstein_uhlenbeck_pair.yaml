@@ -1,0 +1,30 @@
+strategy:
+  name: ornstein_uhlenbeck_residual
+
+# Pairs-trading variant, reusing OrnsteinUhlenbeckResidualStrategy
+# unchanged - "residual against a broad market basket" and "residual
+# against one specific paired instrument" are the same mechanism at the
+# code level, differing only in what builds the injected
+# market_index_feed (see apps/backtester/run_backtest.py's pair_symbol
+# handling). Honest framing, not oversold: this picks ONE reference
+# symbol (HDFCBANK, a large liquid private bank) and applies it as every
+# OTHER traded symbol's reference - not a curated, correlation-checked
+# pair for each one individually. HDFCBANK itself, run through the same
+# backtest, will never trade (its own residual against itself is empty
+# after exclusion) - see core/pricing/market_proxy.py's exclude_symbol.
+#
+# Same params as ornstein_uhlenbeck_residual.yaml otherwise -
+# lookback_bars here matches the 5-minute-bar variant (60); use
+# ornstein_uhlenbeck_residual.yaml's 300 for 1-minute data instead.
+params:
+  pair_symbol: "HDFCBANK"
+  lookback_bars: 60
+  entry_z_threshold: 2.0
+  min_t_stat: 3.5
+  min_half_life_minutes: 15.0
+  max_half_life_minutes: 75.0
+  square_off_time: "15:10"
+  min_remaining_half_lives: 2.0
+  allow_multiple_entries: false
+
+candidate_profile: {}

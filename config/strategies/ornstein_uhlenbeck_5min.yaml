@@ -1,0 +1,21 @@
+strategy:
+  name: ornstein_uhlenbeck
+
+# 5-minute-bar variant of ornstein_uhlenbeck.yaml - only lookback_bars
+# differs (60 bars = ~5 real-world hours at 5-minute bars, vs 300 bars at
+# 1-minute bars for the same real-world window). Everything else
+# (min_t_stat, the minute-based half-life band, square_off_time) is
+# already bar-interval-portable and unchanged - see
+# core/strategy/ornstein_uhlenbeck.py's docstring for why lookback_bars
+# specifically is the one bar-count (not minute-based) parameter here.
+params:
+  lookback_bars: 60
+  entry_z_threshold: 2.0
+  min_t_stat: 3.5
+  min_half_life_minutes: 15.0
+  max_half_life_minutes: 75.0
+  square_off_time: "15:10"
+  min_remaining_half_lives: 2.0
+  allow_multiple_entries: false
+
+candidate_profile: {}

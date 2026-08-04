@@ -22,7 +22,8 @@ class CSVMarketDataFeed(MarketDataFeed):
         self._subscribed: set[str] = set()
         self._latest: dict[str, MarketBar] = {}
 
-    def subscribe(self, symbol: str) -> None:
+    def subscribe(self, symbol: str, exchange: str | None = None) -> None:
+        # exchange unused: this feed's rows already carry their own exchange field.
         self._subscribed.add(symbol)
 
     def unsubscribe(self, symbol: str) -> None:
