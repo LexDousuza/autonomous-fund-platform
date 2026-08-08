@@ -33,3 +33,12 @@ logs/
 # authored, so losing it from git costs nothing but a re-run.
 data/processed/nse_index_options_iv_history.csv
 
+# Intermediate data handoff between scripts/prepare_gap_continuation_
+# crosscheck_data.py (this project's own venv) and scripts/vectorbt_
+# cross_check_gap_continuation.py (an isolated venv - vectorbt needs
+# pandas>=3.0.3, incompatible with growwapi's pandas<3.0.0 pin). 52MB,
+# fully regenerable by re-running the prep script; the actual result
+# lives in gap_continuation_vectorbt_crosscheck_results.json instead.
+backtesting/gap_continuation_vectorbt_crosscheck/adjusted_bars.csv
+backtesting/gap_continuation_vectorbt_crosscheck/vectorbt_trades.csv
+

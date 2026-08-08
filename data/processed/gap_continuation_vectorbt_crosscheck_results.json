@@ -1,0 +1,24 @@
+{
+  "engine": "vectorbt (isolated venv - see script docstrings for why)",
+  "n_trades": 3887,
+  "net_pf": {
+    "point_estimate": 1.3675598117127692,
+    "lower": 1.2685108500667985,
+    "upper": 1.4736119442082178
+  },
+  "gross_pf": {
+    "point_estimate": 1.6983349187308976,
+    "lower": 1.5774292001754489,
+    "upper": 1.8299543928230717
+  },
+  "net_p_value": 0.0,
+  "original_harness_net_pf": {
+    "point_estimate": 1.2806936648553862,
+    "lower": 1.1995835807163704,
+    "upper": 1.3647970325026029
+  },
+  "original_harness_n_trades": 5076,
+  "cis_overlap": true,
+  "both_entirely_above_1": true,
+  "known_methodology_difference": "vectorbt.Portfolio.from_signals allows only one open position per symbol at a time; the original harness has no position-tracking and permits overlapping trades - this cross-check's n is expected to be <= the original's for that reason alone"
+}

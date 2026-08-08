@@ -1,0 +1,6 @@
+{
+  "dev_threshold": 0.04982042545354082,
+  "split_date": "2025-05-15",
+  "forward_horizon_days": 5,
+  "capital_per_position": 10000.0
+}
