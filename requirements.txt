@@ -12,3 +12,4 @@ psycopg2-binary==2.9.12  # sync Postgres driver for apps/api - matches this code
 statsmodels==0.14.6  # real ADF/cointegration tests, core/pricing/statistical_tests.py
 arch==8.0.0  # GARCH conditional-volatility forecasting, core/pricing/garch_volatility.py
 hmmlearn==0.3.3  # Gaussian HMM regime detection, core/pricing/regime_hmm.py
+pyportfolioopt==1.6.0  # max-Sharpe allocation weights, core/portfolio/optimizer.py
