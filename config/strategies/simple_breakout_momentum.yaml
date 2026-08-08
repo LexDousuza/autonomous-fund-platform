@@ -1,6 +1,12 @@
 strategy:
   name: simple_breakout_momentum
 
+# Links this config to its authoritative research-registry entry so
+# tests/integration/test_portfolio_governance.py can verify active
+# strategies are actually Validated/Pass, not just present in
+# active_portfolio.yaml.
+research_registry_id: EXP-0012
+
 # breakout_lookback_bars=5: a multi-day synthetic backtest (see
 # core/backtest/) showed lookback=5 consistently beating lookback=1 on
 # profit factor and max drawdown - comparing against just 1 prior bar
