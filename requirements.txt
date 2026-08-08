@@ -10,3 +10,4 @@ fastapi==0.141.1  # apps/api - JSON API backing the new web/ dashboard
 uvicorn==0.38.0  # ASGI server for apps/api
 psycopg2-binary==2.9.12  # sync Postgres driver for apps/api - matches this codebase's fully-synchronous convention
 statsmodels==0.14.6  # real ADF/cointegration tests, core/pricing/statistical_tests.py
+arch==8.0.0  # GARCH conditional-volatility forecasting, core/pricing/garch_volatility.py
